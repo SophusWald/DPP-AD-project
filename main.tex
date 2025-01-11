@@ -1,8 +1,19 @@
 \documentclass{article}
+
+% --- Packages ------------------------------------------- ----- Standard Packages --------------------------------
 \usepackage{graphicx} % Required for inserting images
+\usepackage{amsthm} %let us define theorems
+\usepackage{amssymb} %Useful Symbols
+\usepackage{mathtools} %better version of amsmath
+\usepackage{microtype} %make things look nicer
+\usepackage{float} %Let figures appear the right place on page
+\usepackage{scalerel}
+\usepackage[backend = biber, style = alphabetic, urldate = long]{biblatex}
+\bibliography{References.bib}
 
 \title{DPP project}
-\author{Sophus Valentin Willumsgaard}
+\author{Peter Adema \\
+Sophus Valentin Willumsgaard}
 \date{January 2025}
 
 \begin{document}
@@ -10,5 +21,19 @@
 \maketitle
 
 \section{Introduction}
+The purpose of this project is to implement the algorithm given in \cite{PPAD}, for reverse
+differentation of the scan operator in Futhark.
+We compare this with the current implementation described in \cite{Futhark}.
+\section{Algorithm}
+We here give a description of the procedures for automatic differentation of
+scan decribed in \cite{PPAD} and \cite{Futhark}.
+\section{Implementation}
+\section{Benchmark}
+For the purpose of being able to compare with the Benchmarks of
+\cite{Futhark}, we have done the same Benchmarks. We have also done further
+benchmarks
+\section{Conclusion}
+
+\printbibliography
 
 \end{document}
