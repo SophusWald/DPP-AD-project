@@ -10,6 +10,12 @@
 \usepackage{scalerel}
 \usepackage{caption}
 \usepackage{subcaption}
+\usepackage{hyperref}
+% https://tex.stackexchange.com/questions/254044/caption-and-label-on-minted-code
+\usepackage[newfloat]{minted}
+\usepackage{caption}
+\newenvironment{code}{\captionsetup{type=listing}}{}
+\SetupFloatingEnvironment{listing}{name=Code Block}
 % --- Style for haskell code
 \usepackage{listings}
 \lstset{
@@ -97,7 +103,101 @@ calculate these in a parallel way.
 First of we note that,
 given the calculation of \(\xo\),
 
+\newpage
 \section{Implementation}
+The implementation of the algorithm described in \cite{PPAD} was driven by the \href{https://github.com/diku-dk/ifl23-revad-red-scan/blob/main/scan/scan-adj-comp.fut}{reference implementation} in Futhark code from \cite{Futhark}, with the structure of the compiler code globally following the Futhark reference code. There is one notable difference between the Futhark implementation and the compiler code, namely in the treatment of neutral elements for \lstinline{op_lifted}. In \cite{PPAD} it was noted that for the lifted operator as defined there, \lstinline{(e, e, 0)} would serve as a right-neutral element, allowing for a reverse-scan over the constructed array \lstinline{m} (with \lstinline{e} being the original neutral element). This approach leads to the simple definition of \lstinline{op_lift} from the Futhark reference code in Code Block \ref{code:fut-oplift}:
+\begin{code}
+\begin{minted}[linenos]{futhark}
+let z_term = op_bar_1 op (x1, a1, y2_h)
+let z = plus z_term y1_h
+in  (x1, op a1 a2, z)
+\end{minted}
+\caption{Reference Futhark code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs). \lstinline{op_bar_1} refers to differentiating \lstinline{op} with respect to its first argument.\\}
+\label{code:fut-oplift}
+\end{code}
+And, while we can similarly define the core operator in the compiler code (Code Block \ref{code:hsk-oplift}):
+\begin{code}
+\begin{minted}[linenos]{haskell}
+op_lift px1 pa1 py1 pa2 py2 adds = do
+    op_bar_1 <- mkScanAdjointLam ops (scanLambda scan) WrtFirst (Var . paramName <$> py2)
+    let op_bar_args = toExp . Var . paramName <$> px1 ++ pa1
+    z_term <- map resSubExp <$> eLambda op_bar_1 op_bar_args
+    let z =
+        mapM
+          (\(z_t, y_1, add) -> head <$> eLambda add [toExp z_t, toExp y_1])
+          (zip3 z_term (Var . paramName <$> py1) adds)
+    
+    let x1 = subExpsRes <$> mapM (toSubExp "x1" . Var . paramName) px1
+    op <- renameLambda $ scanLambda scan
+    let a3 = eLambda op (toExp . paramName <$> pa1 ++ pa2)
+    let is_e = pure [subExpRes $ Constant $ BoolValue False]
+    
+    concat <$> sequence [x1, a3, z, is_e]
+\end{minted}
+\caption{Haskell code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs)\\}
+\label{code:hsk-oplift}
+\end{code}
+ensuring that this operator produces correct results under a scan required more work. This is due to that the constant folding mechanism in later passes of the Futhark compiler made incorrect inferences regarding how the neutral element could be inlined in the scan for some operators and neutral elements. As a concrete example, when differentiating \lstinline{scan f32.max f32.lowest}, the IR generated for \lstinline{op_bar_1} would look like Code Block \ref{code:ir-wrong}
+
+\begin{code}
+\begin{minted}[linenos]{rust}
+ \ {...,
+    a1 : f32,
+    y1_h : f32
+    y2_h: f32
+    ...} : {..., f32} ->
+        let {convop_x_7531 : bool} =
+          le32(a1, -f32.inf) // This is suspicious
+        let {convop_x_7532 : i32} =
+          btoi bool convop_x_7531 to i32
+        let {binop_y_7533 : f32} =
+          sitofp i32 convop_x_7532 to f32
+        let {z_term : f32} =
+          fmul32(y2_h, binop_y_7533)
+        ...
+        let {z : f32} =
+          fadd32(y1_h, z_term)
+        in {..., z}
+\end{minted}
+\caption{Incorrect IR for \lstinline{op_bar_1}}
+\label{code:ir-wrong}
+\end{code}
+We can see that the original intention of Line 7 in Code Block \ref{code:ir-wrong} would have been to check if $a_1 \leq x_1$
+\begin{code}
+\begin{minted}[linenos]{futhark}
+let ys = scan op e u
+let as_lft = map (\i -> if i < n-1 then u[i+1] else e) (iota n)
+let m = zip3 ys as_lft x_b
+let (_, _, rs_adj) = unzip3 <|
+    scan_right (op_lft plus op) (e, e, zero) m
+let ys_right = map (\i -> if i == 0 then e else ys[i-1]) (iota n)
+let as_bar = map (op_bar_2 op) (zip3 ys_right u rs_adj)
+in  as_bar
+\end{minted}
+\caption{Reference Futhark code for \lstinline{scan_bar} (main reverse AD fuction)}
+\label{code:fut-scanbar}
+\end{code}
+\begin{code}
+\begin{minted}[linenos]{haskell}
+let e = scanNeutral scan
+as_lift <- asLiftPPAD as w e
+
+is_e <- letExp "is_e" $ BasicOp $ Replicate (Shape [w]) $ Constant $ BoolValue False
+let m = ys ++ as_lift ++ ys_adj ++ [is_e]
+
+op_lft <- mkPPADOpLifted ops as scan w
+a_zero <- mapM (letExp "rscan_zero" . zeroExp . rowType) as_ts
+let lft_scan = Scan op_lft $ e ++ e ++ map Var a_zero ++ [Constant $ BoolValue True]
+rs_adj <- (!! 2) . chunk d <$> scanRight m w lft_scan
+
+ys_right <- ysRightPPAD ys w e
+
+final_lmb <- finalMapPPAD ops as scan
+letTupExp "as_bar" $ Op $ Screma w (ys_right ++ as ++ rs_adj) $ mapSOAC final_lmb
+\end{minted}
+\caption{Haskell code for \lstinline{scan_bar} (main reverse AD fuction)}
+\label{code:hsk-scanbar}
+\end{code}
 \section{Benchmark}
 To compare the efficiency of our implementation,
 we have run different benchmarks,
