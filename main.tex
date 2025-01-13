@@ -59,6 +59,7 @@ We compare this with the current implementation described in \cite{Futhark}.
 \section{Algorithm}
 We here give a description of the procedures for automatic differentiation of
 scan described in \cite{PPAD} and \cite{Futhark}.
+
 \subsection{Non Parallel Procedure}
 Let \(\odot\) be an associative operator with an identity element \(e_{\odot}\).
 This can either be on a datatype of numbers or array of numbers.
@@ -95,6 +96,7 @@ calculate these in a parallel way.
 \subsection{Parallelization}
 First of we note that,
 given the calculation of \(\xo\),
+
 \section{Implementation}
 \section{Benchmark}
 To compare the efficiency of our implementation,
