@@ -8,9 +8,41 @@
 \usepackage{microtype} %make things look nicer
 \usepackage{float} %Let figures appear the right place on page
 \usepackage{scalerel}
+\usepackage{caption}
+\usepackage{subcaption}
+% --- Style for haskell code
+\usepackage{listings}
+\lstset{
+  frame=none,
+  xleftmargin=2pt,
+  stepnumber=1,
+  numbers=left,
+  numbersep=5pt,
+  numberstyle=\ttfamily\tiny\color[gray]{0.3},
+  belowcaptionskip=\bigskipamount,
+  captionpos=b,
+  escapeinside={*'}{'*},
+  language=haskell,
+  tabsize=2,
+  emphstyle={\bf},
+  commentstyle=\it,
+  stringstyle=\mdseries\rmfamily,
+  showspaces=false,
+  keywordstyle=\bfseries\rmfamily,
+  columns=flexible,
+  basicstyle=\small\sffamily,
+  showstringspaces=false,
+  morecomment=[l]\%,
+}
+% ---- bibliography ----
 \usepackage[backend = biber, style = alphabetic, urldate = long]{biblatex}
 \bibliography{References.bib}
-
+% ----- custom commands ----
+\newcommand{\ors}{\overline{\text{rs}}}
+\newcommand{\rs}{\text{rs}}
+\newcommand{\oas}{\overline{\text{as}}}
+\newcommand{\xo}{\overline{\text{x}}}
+\newcommand{\as}{\text{as}}
 \title{DPP project}
 \author{Peter Adema \\
 Sophus Valentin Willumsgaard}
@@ -19,7 +51,7 @@ Sophus Valentin Willumsgaard}
 \begin{document}
 
 \maketitle
-
+\tableofcontents
 \section{Introduction}
 The purpose of this project is to implement the algorithm given in \cite{PPAD}, for reverse
 differentiation of the scan operator in Futhark.
@@ -27,11 +59,183 @@ We compare this with the current implementation described in \cite{Futhark}.
 \section{Algorithm}
 We here give a description of the procedures for automatic differentiation of
 scan described in \cite{PPAD} and \cite{Futhark}.
+
+\subsection{Non Parallel Procedure}
+Let \(\odot\) be an associative operator with an identity element \(e_{\odot}\).
+This can either be on a datatype of numbers or array of numbers.
+%\begin{lstlisting}[mathescape=true]
+%   let rs = scan $\odot$ $e_{\odot}$ as
+%\end{lstlisting}
+Let \(\ors\) be the adjoint of rs, which is known at the current stage of
+automatic differentiation.
+We are then interested in calculating \(\oas\).
+From the formula
+\begin{align*}
+	\rs [0] = \as[0] \\
+	\rs [i+1] = \rs[i] \odot \as[i+1]
+\end{align*}
+We see that the value of \(\rs[i]\) depend on \(\rs[j]\) for \(i>j\).
+For this reason we introduce another array of adjoint vectors \(\xo\),
+which is the same as \(\ors\) but with the with contribution of the lower
+values to the higher values recorded.
+From the above formulas we then get
+
+\begin{align*}
+	\xo [n-1] = \rs [n-1]      \\
+	\xo [i-1] = \frac{\partial (\rs [i-1] \odot \as[i])}{\partial \rs[i-1]}
+	\cdot \xo[i]   + \ors[i-1] \\
+	\oas [0] = \xo[0]          \\
+	\oas [i] = \frac{\partial (\rs [i-1] \odot \as[i])}{\partial \as[i]}
+	\cdot
+	\xo[i]
+\end{align*}
+From these formulas, we can write two for loops to calculate first \(\xo\)
+and then \(\oas\),
+however this would not preserve parallelism. We will now describe how to
+calculate these in a parallel way.
+\subsection{Parallelization}
+First of we note that,
+given the calculation of \(\xo\),
+
 \section{Implementation}
 \section{Benchmark}
+To compare the efficiency of our implementation,
+we have run different benchmarks,
+to see how our implementation performs for different operations.
+%TODO:Add something about which system the benchmarks are run on.
+
+In our benchmarks, we test 4 different implementations.
+\begin{enumerate}
+
+	\item Our own implementation.
+	\item An implementation of the same algorithm in Futhark written by Cosmin
+	      also for the \cite{Futhark} paper.
+	      This is to compare how efficient our implementation is.
+	\item The current procedure in Futhark, so we can compare the two
+	      different procedures.
+	\item The primal code, which performs the scan operation without any AD,
+	      to see how big the AD overhead is.
+
+\end{enumerate}
+
 For the purpose of being able to compare with the Benchmarks of
 \cite{Futhark}, we have done the same Benchmarks. We have also done further
 benchmarks
+\begin{figure}
+	\begin{tabular}{|c|c|c|c|c|}
+		         & Primal & RMAD   & PPAD-compiler & PPAD-futhark \\
+		\hline
+		10000000 & 7616   & 33828  & 170336        & 45008        \\
+		50000000 & 37626  & 167955 & 848794        & 223939
+	\end{tabular}
+	\caption{Matrix Multiplication 5x5}
+	\begin{tabular}{|c|c|c|c|c|}
+		          & Primal & RMAD  & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		10000000  & 960    & 6566  & 8263          & 6198         \\
+		100000000 & 8986   & 64790 & 81734         & 61005
+	\end{tabular}
+	\caption{Matrix Multiplication 3x3}
+	\begin{tabular}{|c|c|c|c|c|}
+		          & Primal & RMAD  & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		10000000  & 370    & 1552  & 2086          & 1579         \\
+		100000000 & 3360   & 15019 & 20264         & 15101
+	\end{tabular}
+	\caption{Matrix Multiplication 2x2}
+	\begin{tabular}{|c|c|c|c|c|}
+		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		10000000  & 188    & 614  & 750           & 746          \\
+		100000000 & 1552   & 5637 & 6984          & 6698
+	\end{tabular}
+	\caption{Linear Function Composition}
+	\begin{tabular}{|c|c|c|c|c|}
+		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		10000000  & 190    & 773  & 641           & 631          \\
+		100000000 & 1560   & 7228 & 5919          & 5647
+	\end{tabular}
+	\caption{Linear Function Composition 2}
+	\begin{tabular}{|c|c|c|c|c|}
+		          & Primal & RMAD  & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		10000000  & 369    & 2370  & 2744          & 1531         \\
+		100000000 & 3248   & 23046 & 26746         & 14510
+	\end{tabular}
+	\caption{Function Composition}
+	\begin{tabular}{|c|c|c|c|c|}
+		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		10000000  & 144    & 147  & 215           & 157          \\
+		100000000 & 784    & 1270 & 1848          & 1325
+	\end{tabular}
+	\caption{Addition}
+	\begin{tabular}{|c|c|c|c|c|}
+		         & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		1000000  & 1449   & 302  & 10265         & 1263         \\
+		10000000 & 12995  & 2608 & 91315         & 11537
+	\end{tabular}
+	\caption{Vector Addition}
+	\begin{tabular}{|c|c|c|c|c|}
+		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		10000000  & 146    & 147  & 215           & 565          \\
+		100000000 & 1183   & 1270 & 1848          & 4866
+	\end{tabular}
+	\caption{Min}
+	\begin{tabular}{|c|c|c|c|c|}
+		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		10000000  & 106    & 368  & 479           & 476          \\
+		100000000 & 783    & 3229 & 4323          & 4012
+	\end{tabular}
+	\caption{Mul}
+	\begin{tabular}{|c|c|c|c|c|}
+		         & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
+		\hline
+
+		1000000  & 1448   & 716  & 23582         & 24147        \\
+		10000000 & 12968  & 6558 & 214282        & 214121
+	\end{tabular}
+	\caption{vecmul}
+\end{figure}
+
+\subsection{Comparison of PPAD implementation in Futhark and in compiler}
+Comparing the two PPAD implementations,
+we see that the compiler implementation runs slower or equal in 10/11 benchmarks,
+but that for 9 out of 11 benchmarks the runtime is at most double the
+runtime of the Futhark implementation.
+
+The two exceptions to these are the matrix Multiplication for 5x5 matrices,
+and the vectorised addition,
+suggested the code can still be optimised for datatypes consisting of
+arrays.
+This is however contrasted by the vectorised multiplication which performs
+equally well in both implementations.
+\subsection{Comparison between PPAD and RMAD procedure}
+We see that PPAD-compiler implementation performs worse than the RMAD
+implementation, in all cases except for the linear operator on \(\mathbb{R}^{2}\)
+
+\begin{align*}
+	(a,b) \odot (c,d) = (a + c + b \cdot d, b + d).
+\end{align*}
+In a lot of cases this is expected as the vectorised operations, have extra
+optimization in \cite{Futhark}, making them run faster.
+We still however see that slowdown is no more than a factor 2, for all
+benchmarks except 5x5 matrix multiplication, but that seems to an issue with
+the compiler implementation, rather than the procedure itself, as the
+futhark implementation is much close to the RMAD procedure.
 \section{Conclusion}
 
 \printbibliography
