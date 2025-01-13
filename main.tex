@@ -55,16 +55,30 @@ Sophus Valentin Willumsgaard}
 \section{Introduction}
 The purpose of this project is to implement the algorithm given in \cite{PPAD}, for reverse
 differentiation of the scan operator in Futhark.
-We compare this with the current implementation described in \cite{Futhark}.
-\section{Algorithm}
-We here give a description of the procedures for automatic differentiation of
+In this report,
+we describe the procedure for reverse differentiation of a
+scan operation given in \cite{PPAD},
+and how it differs from the current implementation as described in
+\cite{Futhark}.
+
+We then show how we have implemented the procedure in the Futhark compiler,
+and lastly give benchmarks to compare with the current implementation.
+\section{Description of Algorithm}
+We here give a description of the general-case procedures for automatic differentiation of
 scan described in \cite{PPAD} and \cite{Futhark}.
+
+We will use \(\odot\) to denote a general associative operator with neutral
+element \(e_{\odot}\), defined either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\).
+Given an array of variables in the program \(\text{x}\),
+we let \(\xo\) denote the array of adjoint values in AD.
 \subsection{Non Parallel Procedure}
-Let \(\odot\) be an associative operator with an identity element \(e_{\odot}\).
-This can either be on a datatype of numbers or array of numbers.
-%\begin{lstlisting}[mathescape=true]
-%   let rs = scan $\odot$ $e_{\odot}$ as
-%\end{lstlisting}
+
+
+
+
+\begin{lstlisting}[mathescape=true]
+   let rs = scan $\odot$ $e_{\odot}$ as
+\end{lstlisting}
 Let \(\ors\) be the adjoint of rs, which is known at the current stage of
 automatic differentiation.
 We are then interested in calculating \(\oas\).
