@@ -1,0 +1,9 @@
+\contentsline {section}{\numberline {1}Introduction}{1}{}%
+\contentsline {section}{\numberline {2}Description of Algorithm}{1}{}%
+\contentsline {subsection}{\numberline {2.1}Non Parallel Procedure}{2}{}%
+\contentsline {subsection}{\numberline {2.2}Parallelization}{2}{}%
+\contentsline {section}{\numberline {3}Implementation}{2}{}%
+\contentsline {section}{\numberline {4}Benchmark}{2}{}%
+\contentsline {subsection}{\numberline {4.1}Comparison of PPAD implementation in Futhark and in compiler}{3}{}%
+\contentsline {subsection}{\numberline {4.2}Comparison between PPAD and RMAD procedure}{3}{}%
+\contentsline {section}{\numberline {5}Conclusion}{3}{}%

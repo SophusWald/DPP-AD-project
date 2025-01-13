@@ -1,0 +1,140 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{anyt/global//global/global}
+    \entry{Futhark}{inproceedings}{}
+      \name{author}{4}{}{%
+        {{hash=f902f8321ac0c640890bed701e84c1b0}{%
+           family={Bruun},
+           familyi={B\bibinitperiod},
+           given={Lotte\bibnamedelima Maria},
+           giveni={L\bibinitperiod\bibinitdelim M\bibinitperiod}}}%
+        {{hash=ca97aabfc0f5b3a664af9e5d5c1d85bc}{%
+           family={Larsen},
+           familyi={L\bibinitperiod},
+           given={Ulrik\bibnamedelima Stuhr},
+           giveni={U\bibinitperiod\bibinitdelim S\bibinitperiod}}}%
+        {{hash=a5b767a211c024f3ff3d522016044326}{%
+           family={Hinnerskov},
+           familyi={H\bibinitperiod},
+           given={Nikolaj\bibnamedelima Hey},
+           giveni={N\bibinitperiod\bibinitdelim H\bibinitperiod}}}%
+        {{hash=58c49b84fc783b8037163214c7492680}{%
+           family={Oancea},
+           familyi={O\bibinitperiod},
+           given={Cosmin\bibnamedelima Eugen},
+           giveni={C\bibinitperiod\bibinitdelim E\bibinitperiod}}}%
+      }
+      \list{location}{1}{%
+        {Braga, Portugal}%
+      }
+      \list{publisher}{1}{%
+        {Association for Computing Machinery}%
+      }
+      \strng{namehash}{647950f8efadc5723f8bdbd9b90b12bf}
+      \strng{fullhash}{39e29be8bc7448547f32a0b9333cd1b4}
+      \strng{bibnamehash}{647950f8efadc5723f8bdbd9b90b12bf}
+      \strng{authorbibnamehash}{647950f8efadc5723f8bdbd9b90b12bf}
+      \strng{authornamehash}{647950f8efadc5723f8bdbd9b90b12bf}
+      \strng{authorfullhash}{39e29be8bc7448547f32a0b9333cd1b4}
+      \field{labelalpha}{Bru+24}
+      \field{sortinit}{B}
+      \field{sortinithash}{d7095fff47cda75ca2589920aae98399}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{We present and evaluate the Futhark implementation of reverse-mode automatic differentiation (AD) for the basic blocks of parallel programming: reduce, prefix sum (scan), and reduce-by-index (multi-reduce). We present derivations of general-case algorithms, and then discuss several specializations that result in efficient differentiation of most cases of practical interest. We report an experiment that evaluates the GPU performance of the differentiated code and highlights the impact of the proposed specializations as well as the strengths and weaknesses of differentiating at high level bulk-parallel operators vs “differentiating the memory”, i.e. , low-level implementations that access/update individual array elements.}
+      \field{booktitle}{Proceedings of the 35th Symposium on Implementation and Application of Functional Languages}
+      \field{isbn}{9798400716317}
+      \field{series}{IFL '23}
+      \field{title}{Reverse-Mode AD of Multi-Reduce and Scan in Futhark}
+      \field{year}{2024}
+      \verb{doi}
+      \verb 10.1145/3652561.3652575
+      \endverb
+      \verb{urlraw}
+      \verb https://doi.org/10.1145/3652561.3652575
+      \endverb
+      \verb{url}
+      \verb https://doi.org/10.1145/3652561.3652575
+      \endverb
+    \endentry
+    \entry{PPAD}{inproceedings}{}
+      \name{author}{4}{}{%
+        {{hash=56bf0b340039cf8594436a624ff548a9}{%
+           family={Paszke},
+           familyi={P\bibinitperiod},
+           given={Adam},
+           giveni={A\bibinitperiod}}}%
+        {{hash=0ca5cc1992c89ca9d82473694402bd60}{%
+           family={Johnson},
+           familyi={J\bibinitperiod},
+           given={Matthew\bibnamedelima J.},
+           giveni={M\bibinitperiod\bibinitdelim J\bibinitperiod}}}%
+        {{hash=29563c986154ca2b45d286b4dd5ef92a}{%
+           family={Frostig},
+           familyi={F\bibinitperiod},
+           given={Roy},
+           giveni={R\bibinitperiod}}}%
+        {{hash=07e607fb522f06610feb023ecfa712e2}{%
+           family={Maclaurin},
+           familyi={M\bibinitperiod},
+           given={Dougal},
+           giveni={D\bibinitperiod}}}%
+      }
+      \list{location}{1}{%
+        {Virtual, Republic of Korea}%
+      }
+      \list{publisher}{1}{%
+        {Association for Computing Machinery}%
+      }
+      \strng{namehash}{724e74fc18651eb78eb82fbcd1d9dfb1}
+      \strng{fullhash}{08bbf36567fc77ea14a0c70f999ef92a}
+      \strng{bibnamehash}{724e74fc18651eb78eb82fbcd1d9dfb1}
+      \strng{authorbibnamehash}{724e74fc18651eb78eb82fbcd1d9dfb1}
+      \strng{authornamehash}{724e74fc18651eb78eb82fbcd1d9dfb1}
+      \strng{authorfullhash}{08bbf36567fc77ea14a0c70f999ef92a}
+      \field{labelalpha}{Pas+21}
+      \field{sortinit}{P}
+      \field{sortinithash}{ff3bcf24f47321b42cb156c2cc8a8422}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{We develop automatic differentiation (AD) procedures for reductions and scans—parameterized by arbitrary differentiable monoids—in a way that preserves parallelism, by rewriting them as other reductions and scans. This is in contrast with the literature and with existing AD systems, which are either general, but force sequential execution of the derivative program, or only include hand-crafted rules for a select few monoids (usually (0, +), (1, \texttimes{}), (−∞, max) and (∞, min)) and thus lack the general flexibility of second-order languages.}
+      \field{booktitle}{Proceedings of the 9th ACM SIGPLAN International Workshop on Functional High-Performance and Numerical Computing}
+      \field{isbn}{9781450386142}
+      \field{series}{FHPNC 2021}
+      \field{title}{Parallelism-preserving automatic differentiation for second-order array languages}
+      \field{year}{2021}
+      \field{pages}{13\bibrangedash 23}
+      \range{pages}{11}
+      \verb{doi}
+      \verb 10.1145/3471873.3472975
+      \endverb
+      \verb{urlraw}
+      \verb https://doi.org/10.1145/3471873.3472975
+      \endverb
+      \verb{url}
+      \verb https://doi.org/10.1145/3471873.3472975
+      \endverb
+      \keyw{second-order array languages,scan,reduce,Automatic differentiation}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+
