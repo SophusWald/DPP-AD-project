@@ -2,6 +2,7 @@
 % --- Packages ------------------------------------------- ----- Standard Packages --------------------------------
 \usepackage{graphicx} % Required for inserting images
 \usepackage{amsthm} %let us define theorems
+\newtheorem{theorem}{Theorem}
 \usepackage{amssymb} %Useful Symbols
 \usepackage{mathtools} %better version of amsmath
 \usepackage{microtype} %make things look nicer
@@ -43,11 +44,22 @@
 \usepackage[backend = biber, style = alphabetic, urldate = long]{biblatex}
 \bibliography{References.bib}
 % ----- custom commands ----
-\newcommand{\ors}{\overline{\text{rs}}}
-\newcommand{\rs}{\text{rs}}
-\newcommand{\oas}{\overline{\text{as}}}
-\newcommand{\xo}{\overline{\text{x}}}
-\newcommand{\as}{\text{as}}
+%\newcommand{\ors}{\overline{\text{rs}}}
+%\newcommand{\rs}{\text{rs}}
+%\newcommand{\oas}{\overline{\text{as}}}
+%\newcommand{\xo}{\overline{\text{x}}}
+%\newcommand{\as}{\text{as}}
+\newcommand{\ors}{\overline{rs}}
+\newcommand{\obs}{\overline{bs}}
+\newcommand{\ob}{\overline{b}}
+\newcommand{\rs}{rs}
+\newcommand{\xs}{rs}
+\newcommand{\oas}{\overline{as}}
+\newcommand{\xo}{\overline{xs}}
+\newcommand{\as}{as}
+\newcommand{\bs}{bs}
+\newcommand{\cs}{cs}
+\newcommand{\ds}{ds}
 \title{Scan Reverse-AD Improvements applied to the Futhark Compiler}
 \author{Peter Adema (qlz919@alumni.ku.dk)\\
 Sophus Valentin Willumsgaard (hwx333@alumni.ku.dk)}
@@ -75,20 +87,23 @@ scan described in \cite{PPAD} and \cite{Futhark}.
 We will use \(\odot\) to denote a general associative operator with neutral
 element \(e_{\odot}\), defined either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\).
 Given an array of variables in the program \(\text{x}\),
-we let \(\xo\) denote the array of adjoint values in AD.
-\subsection{Non Parallel Procedure}
+we let \(\xo\) denote the array of adjoint values in AD. Following
+\cite{PPAD}, and the current implementation of AD in Futhark,
+we let the adjoint values have same type as there corresponding variables.
+\subsection{Non-Parallel Procedure}
 Our task is assuming we have a program containing the following definition
 \begin{minted}[escapeinside=||]{futhark}
-let rs = scan |$\odot$| |$e_{\odot}$| as
+let |$\rs$| = scan |$\odot$| |$e_{\odot}$| |$\as$|
 \end{minted}
-to use the values of \(\ors, \rs, \as\) to calculate \(\oas\).
+to use the values of
+\(\ors, \rs, \as\) to calculate \(\oas\).
 From the definition of scan, we have
 %\begin{minted}[escapeinside=||]{futhark}
 %	|$\rs [0] = \as[0]$|
 %	|$\rs [i+1] = \rs[i] \odot \as[i+1]$|
 %\end{minted} 
 \begin{align*}
-	\rs [0] = \as[0] \\
+	\rs[0] = \as[0] \\
 	\rs [i+1] = \rs[i] \odot \as[i+1]
 \end{align*}
 We see that the value of \(\rs[i]\) depend on \(\rs[j]\) for \(i>j\).
@@ -98,7 +113,7 @@ values to the higher values recorded.
 From the above formulas we then get
 
 \begin{align*}
-	\xo [n-1] = \rs [n-1]      \\
+	\xo [n-1] = \ors [n-1]     \\
 	\xo [i-1] = \frac{\partial (\rs [i-1] \odot \as[i])}{\partial \rs[i-1]}
 	\cdot \xo[i]   + \ors[i-1] \\
 	\oas [0] = \xo[0]          \\
@@ -109,12 +124,108 @@ From the above formulas we then get
 From these formulas, we can calculate \(\oas\) in two loops.
 The first loop inductively calculates \(\xo\),
 and the second loop calculate \(\oas\),
+%TODO:maybe write the for loops in pseudocode?
 however this would not preserve parallelism. We will now describe how to
 calculate these in a parallel way.
 \subsection{Parallelization}
-First of we note that,
-given the calculation of \(\xo\),
+Given the calculation of \(\xo\),
+we note that the calculation of \(\oas[i]\) does not depend on any values of
+\(\oas\),
+so it can be calculated by applying a map operator,
+preserving parallelization.
 
+The harder challenge is then to calculate \(\xo\).
+To resolve this,
+we define a new monoid structure \(\otimes\) on \((\mathbb{R}^{n})^{3}\)
+given by
+
+\begin{align*}
+	[r_{1}, a_{1}, \overline{r}_{1}] \otimes
+	[r_{2}, a_{2}, \overline{r}_{2}] =
+	\left[r_{1}, a_{1} \otimes a_{2},
+		\frac{\partial (r_{1} \odot a_{1})}{\partial r_{1}} \cdot \overline{r}_{2} + \overline{r}_{1} \right]
+\end{align*}
+in \cite{PPAD} they show this operator is associative and have a right
+identity \(e_{\otimes} :=[e_{\odot}, e_{\odot}, 0]\).
+
+\begin{theorem}
+	In the following procedure
+	\begin{minted}[escapeinside=££]{futhark}
+let £$ms$£ = zip3 £$\rs$£ (tail £$\as$£ ++ £$e_{\odot}$£) £$\ors$£
+let (£$\bs,\cs,\ds$£) = scan_right £$\otimes$£ £$e_{\otimes}$£ £$ms$£ |> unzip3
+\end{minted}
+	\(\ds\) calculates \(\xo\).
+\end{theorem}
+\begin{proof}
+	The argument follows by reverse induction on indices of \(\xo\).
+	Starting with \(n-1\), we have
+	\begin{align*}
+		\ds_{n-1} = \ors_{n-1}
+	\end{align*}
+	which agrees with  \(\xo_{n-1}\).
+	Now assuming that \(\ds_{i} = \xo_{i}\) we have
+	\begin{align*}
+		[\bs_{i-1}, \cs_{i-1}, \ds_{i-1}] \\
+		= [\rs_{i-1}, \as_{i}, \ors_{i-1}]\otimes
+		[\bs_{i}, \cs_{i}, \ds_{i}]       \\
+		= \left[\rs_{i-1}, a_{i} \otimes \cs_{i},
+			\frac{\partial (rs_{i-1} \odot a_{i})}{\partial r_{i-1}} \cdot \ds_{i} + \ors_{i-1}
+		\right]                           \\
+		= \left[\rs_{i-1}, a_{i} \otimes \cs_{i},
+			\frac{\partial (rs_{i-1} \odot a_{i})}{\partial r_{i-1}} \cdot \xo_{i} + \ors_{i-1}
+			\right]
+	\end{align*}
+	We then see that the third argument agrees with our formula for
+	\(\xo_{i-1}\) above, finishing the induction argument.
+\end{proof}
+\(\oas\) is then according to the procedure in\cite{PPAD},
+calculated by
+
+\begin{minted}[escapeinside=££]{futhark}
+let £$ms$£ = zip3 £$\rs$£ (tail £$\as$£ ++ [£$e_{\odot}$£]) £$\ors$£
+let (£$\bs,\cs,\ds$£) = scan_right £$\otimes$£ £$e_{\otimes}$£ £$ms$£ |> unzip3
+map3 (\x y z -> £$\partial (x \odot y)/\partial y \cdot z$£) ([£$e_{\odot}$£] ++ init £$\rs$£ ) £$ \as $£ £$ \ds $£
+\end{minted}
+\subsection{Comparison to current Futhark implementation}
+The general idea for reverse AD for scan operators in the current Futhark
+implementation, is similar to the above procedure,
+in that it first calculates the array \(\xo\) with a scan,
+and then calculates \(\oas\) with a map using \(\xo\).
+
+The calculation of \(\oas\) is the same as the one above,
+but differs in the calculation of \(\xo\).
+
+Instead of calculating the derivatives, when they are applied to the
+adjoints inside the scan,
+it instead first calculates all the derivatives
+
+\begin{align*}
+	\frac{\partial rs[i-1] \odot \as[i]}{\partial \as[i]}
+\end{align*}
+and saves the result. This can be done by a map operator, since the
+derivative only depend on \(\rs, \as\) and the operator \(\odot\).
+From this \(\xo\) can be calculated by a scan operator.
+
+It is also worth noting that in special cases,
+such as then the operator \(\odot\) is addition or a vectorised version of scalar operator,
+there are more optimal ways of calculating the adjoint values,
+which the compiler takes advantage of.
+\subsection{Discussion about Efficiency}
+The disadvantages of calculating the Jacobians beforehand,
+is that it is memory-intensive to have so much data to be used inside the
+scan operator. Furthermore calculating the Jacobians seperated from their
+application to the adjoints,
+removes the possibility of using optimization build in the automatic
+differentiation.
+For example if the adjoint values are 0 in some dimensions,
+the derivatives does not need to be calculated in those dimensions.
+
+However calculating the Jacobian beforehand has some advantages. In
+particular,
+the current Futhark compiler after calculating the Jacobian, performs static
+analysis to see if the Jacobian is of block-diagonal form.
+In this case the Jacobians can be represented by much smaller matrices,
+which vastly increases the scan step in computation.
 \newpage
 \section{Implementation}
 The implementation of the algorithm described in \cite{PPAD} was driven by the \href{https://github.com/diku-dk/ifl23-revad-red-scan/blob/main/scan/scan-adj-comp.fut}{reference implementation} in Futhark code from \cite{Futhark}, with the structure of the compiler code globally following the Futhark reference code. There is one notable difference between the Futhark implementation and the compiler code, namely in the treatment of neutral elements for \lstinline{op_lifted}. In \cite{PPAD} it was noted that for the lifted operator as defined there, \lstinline{(e, e, 0)} would serve as a right-neutral element, allowing for a reverse-scan over the constructed array \lstinline{m} (with \lstinline{e} being the original neutral element). This approach leads to the simple definition of \lstinline{op_lift} from the Futhark reference code in Code Block \ref{code:fut-oplift}:
@@ -147,13 +258,13 @@ op_lift px1 pa1 py1 pa2 py2 adds = do
     
     concat <$> sequence [x1, a3, z, is_e]
 \end{minted}
-\caption{Haskell code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs).\\}
-\label{code:hsk-oplift}
+	\caption{Haskell code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs).\\}
+	\label{code:hsk-oplift}
 \end{code}
 However, while the above is an accurate translation of the Futhark reference code, ensuring that it produces correct results under a scan required more work. This is due to that the constant folding mechanism in later passes of the Futhark compiler occasionally made incorrect inferences regarding how the neutral element could be inlined in the scan. As a concrete example, when differentiating \lstinline{scan f32.max f32.lowest}, the IR generated for \lstinline{op_bar_1} would look like Code Block \ref{code:ir-wrong}:
 
 \begin{code}
-\begin{minted}[linenos]{rust}
+	\begin{minted}[linenos]{rust}
 // This lambda is op_lift for f32.max
  \ {...,
     a1 : f32,
@@ -173,8 +284,8 @@ However, while the above is an accurate translation of the Futhark reference cod
           fadd32(y1_h, z_term)
         in {..., z}
 \end{minted}
-\caption{Incorrect IR for \lstinline{op_bar_1}. Names have been changed for clarity.\\}
-\label{code:ir-wrong}
+	\caption{Incorrect IR for \lstinline{op_bar_1}. Names have been changed for clarity.\\}
+	\label{code:ir-wrong}
 \end{code}
 \vspace{0.3cm}
 We can see that the original intention of Line 7 in Code Block \ref{code:ir-wrong} would have been to check if $a_1 \leq x_1$, as in that case the carry $x_1$ would have continued through the \lstinline{f32.max}, adding the contribution of \lstinline{y2_h} to \lstinline{z} in the form of \lstinline{z_term}. However, we can see that, during optimization of the generated function, $x_1$ was replaced with the constant value from the neutral value (\lstinline{f32.lowest} is \lstinline{-f32.inf}).
@@ -184,7 +295,7 @@ To mitigate this, the method we found was to add an extra boolean field to all e
 Using this implementation of \lstinline{op_lift} (named \lstinline{mkPPADOpLifted} in the compiler code), we proceeded to implement the main body of the scan reverse-AD. Code Block \ref{code:fut-scanbar} shows the reference code for this (named \lstinline{scan_bar}):
 \newpage
 \begin{code}
-\begin{minted}[linenos]{futhark}
+	\begin{minted}[linenos]{futhark}
 let ys = scan op e u
 let as_lft = map (\i -> if i < n-1 then u[i+1] else e) (iota n)
 let m = zip3 ys as_lft x_b
@@ -194,8 +305,8 @@ let ys_right = map (\i -> if i == 0 then e else ys[i-1]) (iota n)
 let as_bar = map (op_bar_2 op) (zip3 ys_right u rs_adj)
 in  as_bar
 \end{minted}
-\caption{Reference Futhark code for \lstinline{scan_bar} (main reverse AD fuction).}
-\label{code:fut-scanbar}
+	\caption{Reference Futhark code for \lstinline{scan_bar} (main reverse AD fuction).}
+	\label{code:fut-scanbar}
 \end{code}
 \vspace{0.3cm}
 The compiler code is very similar in structure, with the exception of the additional boolean field marking the neutral element as "e" and the original array as "not e". The following Code Block \ref{code:hsk-scanbar} was added as part of the main \lstinline{diffScan} function (each line grouping is one \lstinline{let} from Code Block \ref{code:fut-scanbar}):
@@ -217,8 +328,8 @@ ys_right <- ysRightPPAD ys w e
 op_bar_2 <- finalMapPPAD ops as scan
 letTupExp "as_bar" $ Op $ Screma w (ys_right ++ as ++ rs_adj) $ mapSOAC op_bar_2
 \end{minted}
-\caption{Haskell code for \lstinline{scan_bar} (main reverse AD fuction). \lstinline{w} is the length of the arrays in \lstinline{as}.\\}
-\label{code:hsk-scanbar}
+	\caption{Haskell code for \lstinline{scan_bar} (main reverse AD fuction). \lstinline{w} is the length of the arrays in \lstinline{as}.\\}
+	\label{code:hsk-scanbar}
 \end{code}
 \vspace{0.3cm}
 The functions \lstinline{asLiftPPAD}, \lstinline{scanRight}, \lstinline{ysRightPPAD} and \lstinline{finalMapPPAD} were also added in the compiler implementation, all bearing close resemblance to the reference implementation in terms of structure.
