@@ -48,9 +48,9 @@
 \newcommand{\oas}{\overline{\text{as}}}
 \newcommand{\xo}{\overline{\text{x}}}
 \newcommand{\as}{\text{as}}
-\title{DPP project}
-\author{Peter Adema \\
-Sophus Valentin Willumsgaard}
+\title{Scan Reverse-AD Improvements applied to the Futhark Compiler}
+\author{Peter Adema (qlz919@alumni.ku.dk)\\
+Sophus Valentin Willumsgaard (hwx333@alumni.ku.dk)}
 \date{January 2025}
 
 \begin{document}
@@ -127,11 +127,12 @@ in  (x1, op a1 a2, z)
 	\caption{Reference Futhark code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs). \lstinline{op_bar_1} refers to differentiating \lstinline{op} with respect to its first argument.\\}
 	\label{code:fut-oplift}
 \end{code}
-And, while we can similarly define the core operator in the compiler code (Code Block \ref{code:hsk-oplift}):
+We can similarly define the core operator in the compiler code, as shown in Code Block \ref{code:hsk-oplift}:
 \begin{code}
 	\begin{minted}[linenos]{haskell}
 op_lift px1 pa1 py1 pa2 py2 adds = do
-    op_bar_1 <- mkScanAdjointLam ops (scanLambda scan) WrtFirst (Var . paramName <$> py2)
+    op_bar_1 <- mkScanAdjointLam ops (scanLambda scan) 
+                    WrtFirst (Var . paramName <$> py2)
     let op_bar_args = toExp . Var . paramName <$> px1 ++ pa1
     z_term <- map resSubExp <$> eLambda op_bar_1 op_bar_args
     let z =
@@ -146,37 +147,44 @@ op_lift px1 pa1 py1 pa2 py2 adds = do
     
     concat <$> sequence [x1, a3, z, is_e]
 \end{minted}
-	\caption{Haskell code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs)\\}
-	\label{code:hsk-oplift}
+\caption{Haskell code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs).\\}
+\label{code:hsk-oplift}
 \end{code}
-ensuring that this operator produces correct results under a scan required more work. This is due to that the constant folding mechanism in later passes of the Futhark compiler made incorrect inferences regarding how the neutral element could be inlined in the scan for some operators and neutral elements. As a concrete example, when differentiating \lstinline{scan f32.max f32.lowest}, the IR generated for \lstinline{op_bar_1} would look like Code Block \ref{code:ir-wrong}
+However, while the above is an accurate translation of the Futhark reference code, ensuring that it produces correct results under a scan required more work. This is due to that the constant folding mechanism in later passes of the Futhark compiler occasionally made incorrect inferences regarding how the neutral element could be inlined in the scan. As a concrete example, when differentiating \lstinline{scan f32.max f32.lowest}, the IR generated for \lstinline{op_bar_1} would look like Code Block \ref{code:ir-wrong}:
 
 \begin{code}
-	\begin{minted}[linenos]{rust}
+\begin{minted}[linenos]{rust}
+// This lambda is op_lift for f32.max
  \ {...,
     a1 : f32,
-    y1_h : f32
+    y1_h : f32,
     y2_h: f32
     ...} : {..., f32} ->
         let {convop_x_7531 : bool} =
-          le32(a1, -f32.inf) // This is suspicious
+          le32(a1, -f32.inf) // x1 was replaced with the n.e.
         let {convop_x_7532 : i32} =
           btoi bool convop_x_7531 to i32
-        let {binop_y_7533 : f32} =
+        let {der_x1 : f32} =
           sitofp i32 convop_x_7532 to f32
         let {z_term : f32} =
-          fmul32(y2_h, binop_y_7533)
+          fmul32(y2_h, der_x1)
         ...
         let {z : f32} =
           fadd32(y1_h, z_term)
         in {..., z}
 \end{minted}
-	\caption{Incorrect IR for \lstinline{op_bar_1}}
-	\label{code:ir-wrong}
+\caption{Incorrect IR for \lstinline{op_bar_1}. Names have been changed for clarity.\\}
+\label{code:ir-wrong}
 \end{code}
-We can see that the original intention of Line 7 in Code Block \ref{code:ir-wrong} would have been to check if $a_1 \leq x_1$
+\vspace{0.3cm}
+We can see that the original intention of Line 7 in Code Block \ref{code:ir-wrong} would have been to check if $a_1 \leq x_1$, as in that case the carry $x_1$ would have continued through the \lstinline{f32.max}, adding the contribution of \lstinline{y2_h} to \lstinline{z} in the form of \lstinline{z_term}. However, we can see that, during optimization of the generated function, $x_1$ was replaced with the constant value from the neutral value (\lstinline{f32.lowest} is \lstinline{-f32.inf}).
+
+To mitigate this, the method we found was to add an extra boolean field to all elements of the scan, which would be \lstinline{True} for the neutral element and \lstinline{False} for all elements from the real array. Modifying \lstinline{op_lift} such that it ignored neutral elements and only performed the calculations when both of its arguments were non-neutral elements added overhead to the operator, but prevented the incorrect inlining from taking place. Notably, adding this check to only one side (i.e. only guarding against neutral elements as a first argument) fixed some instances of incorrect inlining (such as \lstinline{scan f32.max}, and even though the reverse scan makes it such that neutral elements should only appear as second argument), but generated new failures as well (causing the scan of matrix multiplication to fail). As such, a guard against neutral elements was necessary on both sides.
+
+Using this implementation of \lstinline{op_lift} (named \lstinline{mkPPADOpLifted} in the compiler code), we proceeded to implement the main body of the scan reverse-AD. Code Block \ref{code:fut-scanbar} shows the reference code for this (named \lstinline{scan_bar}):
+\newpage
 \begin{code}
-	\begin{minted}[linenos]{futhark}
+\begin{minted}[linenos]{futhark}
 let ys = scan op e u
 let as_lft = map (\i -> if i < n-1 then u[i+1] else e) (iota n)
 let m = zip3 ys as_lft x_b
@@ -186,30 +194,38 @@ let ys_right = map (\i -> if i == 0 then e else ys[i-1]) (iota n)
 let as_bar = map (op_bar_2 op) (zip3 ys_right u rs_adj)
 in  as_bar
 \end{minted}
-	\caption{Reference Futhark code for \lstinline{scan_bar} (main reverse AD fuction)}
-	\label{code:fut-scanbar}
+\caption{Reference Futhark code for \lstinline{scan_bar} (main reverse AD fuction).}
+\label{code:fut-scanbar}
 \end{code}
+\vspace{0.3cm}
+The compiler code is very similar in structure, with the exception of the additional boolean field marking the neutral element as "e" and the original array as "not e". The following Code Block \ref{code:hsk-scanbar} was added as part of the main \lstinline{diffScan} function (each line grouping is one \lstinline{let} from Code Block \ref{code:fut-scanbar}):
 \begin{code}
 	\begin{minted}[linenos]{haskell}
 let e = scanNeutral scan
 as_lift <- asLiftPPAD as w e
 
-is_e <- letExp "is_e" $ BasicOp $ Replicate (Shape [w]) $ Constant $ BoolValue False
-let m = ys ++ as_lift ++ ys_adj ++ [is_e]
+isnt_e <- letExp "isnt_e" $ BasicOp $ Replicate (Shape [w]) $ Constant $ BoolValue False
+let m = ys ++ as_lift ++ ys_adj ++ [isnt_e]
 
 op_lft <- mkPPADOpLifted ops as scan w
-a_zero <- mapM (letExp "rscan_zero" . zeroExp . rowType) as_ts
-let lft_scan = Scan op_lft $ e ++ e ++ map Var a_zero ++ [Constant $ BoolValue True]
+a_zero <- mapM (fmap Var . letExp "rscan_zero" . zeroExp . rowType) as_types
+let lft_scan = Scan op_lft $ e ++ e ++ a_zero ++ [Constant $ BoolValue True]
 rs_adj <- (!! 2) . chunk d <$> scanRight m w lft_scan
 
 ys_right <- ysRightPPAD ys w e
 
-final_lmb <- finalMapPPAD ops as scan
-letTupExp "as_bar" $ Op $ Screma w (ys_right ++ as ++ rs_adj) $ mapSOAC final_lmb
+op_bar_2 <- finalMapPPAD ops as scan
+letTupExp "as_bar" $ Op $ Screma w (ys_right ++ as ++ rs_adj) $ mapSOAC op_bar_2
 \end{minted}
-	\caption{Haskell code for \lstinline{scan_bar} (main reverse AD fuction)}
-	\label{code:hsk-scanbar}
+\caption{Haskell code for \lstinline{scan_bar} (main reverse AD fuction). \lstinline{w} is the length of the arrays in \lstinline{as}.\\}
+\label{code:hsk-scanbar}
 \end{code}
+\vspace{0.3cm}
+The functions \lstinline{asLiftPPAD}, \lstinline{scanRight}, \lstinline{ysRightPPAD} and \lstinline{finalMapPPAD} were also added in the compiler implementation, all bearing close resemblance to the reference implementation in terms of structure.
+
+Finally, we would like to remark that in some cases, the utility function \lstinline{lambdaReturnType} gave element types instead of the true returns types; returning \lstinline{f32} when a lambda actually returned \lstinline{[]f32}. While there was a relatively simple workaround for this bug, it should be noted that these incorrect types currently cause compilation errors in the 'normal' scan reverse-AD compiler (see \href{https://gist.github.com/p-adema/c8fc4fd5823baca18d90385370aeda5d}{this gist}).
+
+\newpage
 \section{Benchmark}
 To compare the efficiency of our implementation,
 we have run different benchmarks,
@@ -335,6 +351,7 @@ suggested the code can still be optimised for datatypes consisting of
 arrays.
 This is however contrasted by the vectorised multiplication which performs
 equally well in both implementations.
+
 \subsection{Comparison between PPAD and RMAD procedure}
 We see that PPAD-compiler implementation performs worse than the RMAD
 implementation, in all cases except for the linear operator on \(\mathbb{R}^{2}\)
@@ -349,7 +366,16 @@ benchmarks except 5x5 matrix multiplication, but that seems to an issue with
 the compiler implementation, rather than the procedure itself, as the
 futhark implementation is much close to the RMAD procedure.
 \section{Conclusion}
+We can see that ...
 
+We suspect that the cause for the lacking performance in our compiler-generated version of the PPAD
+algorithm lies in the additional checks for neutral elements that are inserted around
+every call to \lstinline{op_lifted}, but verification of this would require a correct
+compiler implementation without these checks.
+
+In conclusion, using the PPAD algorithm as an alternative for the current implementation in the
+Futhark compiler holds promise, but due to practical limitations and lacking performance, further
+work would need to be done to make it a viable alternative in terms of performance.
 \printbibliography
 
 \end{document}
