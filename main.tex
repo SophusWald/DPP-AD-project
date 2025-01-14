@@ -1,5 +1,4 @@
 \documentclass{article}
-
 % --- Packages ------------------------------------------- ----- Standard Packages --------------------------------
 \usepackage{graphicx} % Required for inserting images
 \usepackage{amsthm} %let us define theorems
@@ -78,24 +77,23 @@ element \(e_{\odot}\), defined either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\).
 Given an array of variables in the program \(\text{x}\),
 we let \(\xo\) denote the array of adjoint values in AD.
 \subsection{Non Parallel Procedure}
-
-
-
-
-\begin{lstlisting}[mathescape=true]
-   let rs = scan $\odot$ $e_{\odot}$ as
-\end{lstlisting}
-Let \(\ors\) be the adjoint of rs, which is known at the current stage of
-automatic differentiation.
-We are then interested in calculating \(\oas\).
-From the formula
+Our task is assuming we have a program containing the following definition
+\begin{minted}[escapeinside=||]{futhark}
+let rs = scan |$\odot$| |$e_{\odot}$| as
+\end{minted}
+to use the values of \(\ors, \rs, \as\) to calculate \(\oas\).
+From the definition of scan, we have
+%\begin{minted}[escapeinside=||]{futhark}
+%	|$\rs [0] = \as[0]$|
+%	|$\rs [i+1] = \rs[i] \odot \as[i+1]$|
+%\end{minted} 
 \begin{align*}
 	\rs [0] = \as[0] \\
 	\rs [i+1] = \rs[i] \odot \as[i+1]
 \end{align*}
 We see that the value of \(\rs[i]\) depend on \(\rs[j]\) for \(i>j\).
 For this reason we introduce another array of adjoint vectors \(\xo\),
-which is the same as \(\ors\) but with the with contribution of the lower
+which is the same as \(\ors\) but with the contribution of the lower
 values to the higher values recorded.
 From the above formulas we then get
 
@@ -108,8 +106,9 @@ From the above formulas we then get
 	\cdot
 	\xo[i]
 \end{align*}
-From these formulas, we can write two for loops to calculate first \(\xo\)
-and then \(\oas\),
+From these formulas, we can calculate \(\oas\) in two loops.
+The first loop inductively calculates \(\xo\),
+and the second loop calculate \(\oas\),
 however this would not preserve parallelism. We will now describe how to
 calculate these in a parallel way.
 \subsection{Parallelization}
