@@ -63,7 +63,7 @@
 \title{Scan Reverse-AD Improvements applied to the Futhark Compiler}
 \author{Peter Adema (qlz919@alumni.ku.dk)\\
 Sophus Valentin Willumsgaard (hwx333@alumni.ku.dk)}
-\date{January 2025}
+\date{\today}
 
 \begin{document}
 
@@ -217,14 +217,14 @@ The disadvantages of calculating the Jacobians beforehand,
 is that it is memory-intensive to have so much data to be used inside the
 scan operator. Furthermore calculating the Jacobians seperated from their
 application to the adjoints,
-removes the possibility of using optimization build in the automatic
+removes the possibility of using optimization built in the automatic
 differentiation.
 For example if the adjoint values are 0 in some dimensions,
 the derivatives does not need to be calculated in those dimensions.
 
 However calculating the Jacobian beforehand has some advantages. In
 particular,
-the current Futhark compiler after calculating the Jacobian, performs static
+the current Futhark compiler, after calculating the Jacobian, performs static
 analysis to see if the Jacobian is of block-diagonal form.
 In this case the Jacobians can be represented by much smaller matrices,
 which vastly increases the scan step in computation.
@@ -260,9 +260,8 @@ op_lift px1 pa1 py1 pa2 py2 adds = do
     let x1 = subExpsRes <$> mapM (toSubExp "x1" . Var . paramName) px1
     op <- renameLambda $ scanLambda scan
     let a3 = eLambda op (toExp . paramName <$> pa1 ++ pa2)
-    let is_e = pure [subExpRes $ Constant $ BoolValue False]
     
-    concat <$> sequence [x1, a3, z, is_e]
+    concat <$> sequence [x1, a3, z]
 \end{minted}
 	\caption{Haskell code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs).\\}
 	\label{code:hsk-oplift}
@@ -271,7 +270,7 @@ However, while the above is an accurate translation of the Futhark reference cod
 
 \begin{code}
 	\begin{minted}[linenos]{rust}
-// This lambda is op_lift for f32.max
+// This lambda is op_lift for f32.max, as an argument to scanomap
  \ {...,
     a1 : f32,
     y1_h : f32,
@@ -294,7 +293,7 @@ However, while the above is an accurate translation of the Futhark reference cod
 	\label{code:ir-wrong}
 \end{code}
 \vspace{0.3cm}
-We can see that the original intention of Line 7 in Code Block \ref{code:ir-wrong} would have been to check if $a_1 \leq x_1$, as in that case the carry $x_1$ would have continued through the \lstinline{f32.max}, adding the contribution of \lstinline{y2_h} to \lstinline{z} in the form of \lstinline{z_term}. However, we can see that, during optimization of the generated function, $x_1$ was replaced with the constant value from the neutral value (\lstinline{f32.lowest} is \lstinline{-f32.inf}).
+We can see that the original intention of Line 8 in Code Block \ref{code:ir-wrong} would have been to check if $a_1 \leq x_1$, as in that case the carry $x_1$ would have continued through the \lstinline{f32.max}, adding the contribution of \lstinline{y2_h} to \lstinline{z} in the form of \lstinline{z_term}. However, we can see that, during optimization of the generated function, $x_1$ was replaced with the constant value from the neutral value (\lstinline{f32.lowest} is \lstinline{-f32.inf}).
 
 To mitigate this, the method we found was to add an extra boolean field to all elements of the scan, which would be \lstinline{True} for the neutral element and \lstinline{False} for all elements from the real array. Modifying \lstinline{op_lift} such that it ignored neutral elements and only performed the calculations when both of its arguments were non-neutral elements added overhead to the operator, but prevented the incorrect inlining from taking place. Notably, adding this check to only one side (i.e. only guarding against neutral elements as a first argument) fixed some instances of incorrect inlining (such as \lstinline{scan f32.max}, and even though the reverse scan makes it such that neutral elements should only appear as second argument), but generated new failures as well (causing the scan of matrix multiplication to fail). As such, a guard against neutral elements was necessary on both sides.
 
@@ -404,7 +403,7 @@ In our benchmarks, we test 4 different implementations.
 	\item The current implementation \textbf{RMAD} in Futhark,
 	      so we can compare the two different procedures.
 	\item The primal code, which performs the scan operation without any AD,
-	      to see how big the AD overhead is.
+	      to measure the AD overhead.
 
 \end{enumerate}
 
