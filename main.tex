@@ -53,7 +53,7 @@
 \newcommand{\obs}{\overline{bs}}
 \newcommand{\ob}{\overline{b}}
 \newcommand{\rs}{rs}
-\newcommand{\xs}{rs}
+\newcommand{\xs}{xs}
 \newcommand{\oas}{\overline{as}}
 \newcommand{\xo}{\overline{xs}}
 \newcommand{\as}{as}
@@ -85,11 +85,17 @@ We here give a description of the general-case procedures for automatic differen
 scan described in \cite{PPAD} and \cite{Futhark}.
 
 We will use \(\odot\) to denote a general associative operator with neutral
-element \(e_{\odot}\), defined either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\).
-Given an array of variables in the program \(\text{x}\),
-we let \(\xo\) denote the array of adjoint values in AD. Following
-\cite{PPAD}, and the current implementation of AD in Futhark,
-we let the adjoint values have same type as there corresponding variables.
+element \(e_{\odot}\), defined either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\),
+which is differentiable in each variable.
+Given an array of variables \(\xs\),
+we let \(\xo\) denote the array of adjoint values in AD.
+Following \cite{PPAD},
+and the current implementation of AD in Futhark,
+we let the adjoint values have the same type as there corresponding variables.
+For an array \(as\),
+we switch between the notation \(as[i]\) and \(as_{i}\) to denote its elements
+depending on the context.
+
 \subsection{Non-Parallel Procedure}
 Our task is assuming we have a program containing the following definition
 \begin{minted}[escapeinside=||]{futhark}
@@ -98,20 +104,15 @@ let |$\rs$| = scan |$\odot$| |$e_{\odot}$| |$\as$|
 to use the values of
 \(\ors, \rs, \as\) to calculate \(\oas\).
 From the definition of scan, we have
-%\begin{minted}[escapeinside=||]{futhark}
-%	|$\rs [0] = \as[0]$|
-%	|$\rs [i+1] = \rs[i] \odot \as[i+1]$|
-%\end{minted} 
 \begin{align*}
 	\rs[0] = \as[0] \\
 	\rs [i+1] = \rs[i] \odot \as[i+1]
 \end{align*}
 We see that the value of \(\rs[i]\) depend on \(\rs[j]\) for \(i>j\).
 For this reason we introduce another array of adjoint vectors \(\xo\),
-which is the same as \(\ors\) but with the contribution of the lower
-values to the higher values recorded.
+which is similar to \(\ors\), but also includes the contribution of the lower
+indices upon the higher ones.
 From the above formulas we then get
-
 \begin{align*}
 	\xo [n-1] = \ors [n-1]     \\
 	\xo [i-1] = \frac{\partial (\rs [i-1] \odot \as[i])}{\partial \rs[i-1]}
@@ -124,12 +125,10 @@ From the above formulas we then get
 From these formulas, we can calculate \(\oas\) in two loops.
 The first loop inductively calculates \(\xo\),
 and the second loop calculate \(\oas\),
-%TODO:maybe write the for loops in pseudocode?
 however this would not preserve parallelism. We will now describe how to
 calculate these in a parallel way.
 \subsection{Parallelization}
-Given the calculation of \(\xo\),
-we note that the calculation of \(\oas[i]\) does not depend on any values of
+We note that the calculation of \(\oas[i]\) does not depend on any values of
 \(\oas\),
 so it can be calculated by applying a map operator,
 preserving parallelization.
@@ -149,12 +148,13 @@ in \cite{PPAD} they show this operator is associative and have a right
 identity \(e_{\otimes} :=[e_{\odot}, e_{\odot}, 0]\).
 
 \begin{theorem}
-	In the following procedure
+	The following procedure
 	\begin{minted}[escapeinside=££]{futhark}
 let £$ms$£ = zip3 £$\rs$£ (tail £$\as$£ ++ £$e_{\odot}$£) £$\ors$£
 let (£$\bs,\cs,\ds$£) = scan_right £$\otimes$£ £$e_{\otimes}$£ £$ms$£ |> unzip3
+in ds
 \end{minted}
-	\(\ds\) calculates \(\xo\).
+	calculates \(\xo\).
 \end{theorem}
 \begin{proof}
 	The argument follows by reverse induction on indices of \(\xo\).
@@ -178,32 +178,34 @@ let (£$\bs,\cs,\ds$£) = scan_right £$\otimes$£ £$e_{\otimes}$£ £$ms$£ |>
 	We then see that the third argument agrees with our formula for
 	\(\xo_{i-1}\) above, finishing the induction argument.
 \end{proof}
-\(\oas\) is then according to the procedure in\cite{PPAD},
-calculated by
-
+Given the definition of \(\otimes \), we can then calculate \(\oas\) by
 \begin{minted}[escapeinside=££]{futhark}
 let £$ms$£ = zip3 £$\rs$£ (tail £$\as$£ ++ [£$e_{\odot}$£]) £$\ors$£
 let (£$\bs,\cs,\ds$£) = scan_right £$\otimes$£ £$e_{\otimes}$£ £$ms$£ |> unzip3
-map3 (\x y z -> £$\partial (x \odot y)/\partial y \cdot z$£) ([£$e_{\odot}$£] ++ init £$\rs$£ ) £$ \as $£ £$ \ds $£
+in map3 (\x y z -> £$\partial (x \odot y)/\partial y \cdot z$£) ([£$e_{\odot}$£] ++ init £$\rs$£ ) £$ \as $£ £$ \ds $£
+\end{minted}
+Where the last line correspond to a use of vjp
+\begin{minted}[escapeinside=££]{futhark}
+map3 (\x y z -> vjp (\w -> £$x\odot w$£) y z) ([£$e_{\odot}$£] ++ init £$\rs$£ ) £$ \as $£ £$ \ds $£
 \end{minted}
 \subsection{Comparison to current Futhark implementation}
-The general idea for reverse AD for scan operators in the current Futhark
-implementation, is similar to the above procedure,
+The general idea for reverse AD of scan operators in the current Futhark
+implementation,
+is similar to the above procedure,
 in that it first calculates the array \(\xo\) with a scan,
 and then calculates \(\oas\) with a map using \(\xo\).
-
 The calculation of \(\oas\) is the same as the one above,
-but differs in the calculation of \(\xo\).
+however the calculations of \(\xo\) differs.
 
-Instead of calculating the derivatives, when they are applied to the
-adjoints inside the scan,
-it instead first calculates all the derivatives
-
+Instead of calculating the derivatives
 \begin{align*}
 	\frac{\partial rs[i-1] \odot \as[i]}{\partial \as[i]}
 \end{align*}
-and saves the result. This can be done by a map operator, since the
-derivative only depend on \(\rs, \as\) and the operator \(\odot\).
+inside the scan,
+the Jacobians representing the derivative functions are instead calculated
+first, and stored to be used in the scan.
+This can be done by a map operator,
+since the derivative only depend on \(\rs, \as\) and the operator \(\odot\).
 From this \(\xo\) can be calculated by a scan operator.
 
 It is also worth noting that in special cases,
@@ -226,6 +228,10 @@ the current Futhark compiler, after calculating the Jacobian, performs static
 analysis to see if the Jacobian is of block-diagonal form.
 In this case the Jacobians can be represented by much smaller matrices,
 which vastly increases the scan step in computation.
+The scan is also harder to optimize compared to the map,
+so when the operator inside the scan is more complicated as it is in the
+\cite{PPAD} implementation,
+it will cause a greater runtime.
 \newpage
 \section{Implementation}
 The implementation of the algorithm described in \cite{PPAD} was driven by the \href{https://github.com/diku-dk/ifl23-revad-red-scan/blob/main/scan/scan-adj-comp.fut}{reference implementation} in Futhark code from \cite{Futhark}, with the structure of the compiler code globally following the Futhark reference code. There is one notable difference between the Futhark implementation and the compiler code, namely in the treatment of neutral elements for \lstinline{op_lifted}. In \cite{PPAD} it was noted that for the lifted operator as defined there, \lstinline{(e, e, 0)} would serve as a right-neutral element, allowing for a reverse-scan over the constructed array \lstinline{m} (with \lstinline{e} being the original neutral element). This approach leads to the simple definition of \lstinline{op_lift} from the Futhark reference code in Code Block \ref{code:fut-oplift}:
@@ -337,119 +343,120 @@ Finally, we would like to remark that in some cases, the utility function \lstin
 
 \newpage
 \section{Benchmark}
-To compare the efficiency of our implementation,
-we have run different benchmarks,
-to see how our implementation performs for different operations.
-%TODO:Add something about which system the benchmarks are run on.
+We have performed benchmarks for different operations,
+to compare the efficiency of our implementation with the current implementation in Futhark.
 
-In our benchmarks, we test 4 different implementations.
+\subsection{Methodology}
+\subsubsection*{Operators}
+Our choice of operators to apply scan to are very similar to the ones given
+in \cite{Futhark}, so we are able to compare the results.
+These operators are
 \begin{enumerate}
 
-	\item Our own implementation.
-	\item An implementation of the same PPAD algorithm in Futhark written by Cosmin
-	      also for the \cite{Futhark} paper.
-	      This is to compare how efficient our implementation is.
-	\item The current procedure in Futhark, so we can compare the two
-	      different procedures.
+	\item addition, multiplication and min.
+	\item vectorised addition and multiplication.
+	\item Two linear operators given by
+	      \begin{align*}
+		      (x_{0},y_{0}) \odot (x_{1},y_{1})
+		      =
+		      (x_{1} + y_{1}\cdot x_{0}, y_{0}\cdot y_{1}) \\
+		      (x_{0},y_{0}) \odot' (x_{1},y_{1})
+		      =
+		      (x_{0} + x_{1} + y_{0}\cdot y_{1}, y_{0}+ y_{1})
+	      \end{align*}
+	\item matrix multiplication for matrices of size 2x2, 3x3 and 5x5.
+\end{enumerate}
+We have further added a non-linear operator
+\begin{align*}
+	(x_{0},y_{0}, z_{0}) \odot (x_{1},y_{1}, z_{1})
+	=
+	(\cosh (x_{0})\cdot x_{1} + y_{1}\cdot x_{0},
+	y_{0}\cdot y_{1},
+	\sinh (z_{0} + z_{1}\cdot y_{0} + x_{0}\cdot x_{1} ) \\
+\end{align*}
+\subsubsection*{Datasets}
+For each operation we run two tests with randomly generated arrays of f32
+floats.
+\begin{itemize}
+	\item For vectorised multiplication and addition we have arrays of
+	      dimensions \(16 \times 10^{7}\) and \(16 \times 10^{8}\).
+	\item For 5x5 matrix multiplication, we have two arrays of dimensions \(25 \times 10^{7}\)
+	      and \(25 \times 2 \times 10^{7}\).
+	\item For 3x3 matrix multiplication, we have two arrays of dimensions \(9 \times 10^{7}\)
+	      and \(9 \times 10^{8}\).
+	\item For 2x2 matrix multiplication, we have two arrays of dimensions \(4 \times 10^{7}\)
+	      and \(4 \times 10^{8}\).
+	\item For the other operations we have two arrays of dimensions
+	      \(10^{7}\) and \(10^{8}\).
+\end{itemize}
+\subsubsection*{Hardware}
+We ran the benchmarks on the Futhark machine hendrixfut01fl in the Hendrix
+cluster,
+which is equipped with a Nvidia A100 GPU.
+\subsubsection*{Software}
+In our benchmarks, we test 4 different implementations.
+\begin{enumerate}
+	\item Our own implementation \textbf{PPAD-C} of the \cite{PPAD} in the Futhark compiler.
+	\item An implementation of the same algorithm in Futhark \textbf{PPAD-F} written by Cosmin
+	      for benchmarking for the \cite{Futhark} paper.
+	      This is to compare how efficient our implementation of the algorithm is.
+	\item The current implementation \textbf{RMAD} in Futhark,
+	      so we can compare the two different procedures.
 	\item The primal code, which performs the scan operation without any AD,
 	      to measure the AD overhead.
 
 \end{enumerate}
 
-For the purpose of being able to compare with the Benchmarks of
-\cite{Futhark}, we have done the same Benchmarks. We have also done further
-benchmarks
-\begin{figure}
-	\begin{tabular}{|c|c|c|c|c|}
-		         & Primal & RMAD   & PPAD-compiler & PPAD-futhark \\
-		\hline
-		10000000 & 7616   & 33828  & 170336        & 45008        \\
-		50000000 & 37626  & 167955 & 848794        & 223939
-	\end{tabular}
-	\caption{Matrix Multiplication 5x5}
-	\begin{tabular}{|c|c|c|c|c|}
-		          & Primal & RMAD  & PPAD-compiler & PPAD-futhark \\
-		\hline
 
-		10000000  & 960    & 6566  & 8263          & 6198         \\
-		100000000 & 8986   & 64790 & 81734         & 61005
-	\end{tabular}
-	\caption{Matrix Multiplication 3x3}
-	\begin{tabular}{|c|c|c|c|c|}
-		          & Primal & RMAD  & PPAD-compiler & PPAD-futhark \\
-		\hline
 
-		10000000  & 370    & 1552  & 2086          & 1579         \\
-		100000000 & 3360   & 15019 & 20264         & 15101
-	\end{tabular}
-	\caption{Matrix Multiplication 2x2}
-	\begin{tabular}{|c|c|c|c|c|}
-		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
-		\hline
 
-		10000000  & 188    & 614  & 750           & 746          \\
-		100000000 & 1552   & 5637 & 6984          & 6698
-	\end{tabular}
-	\caption{Linear Function Composition}
-	\begin{tabular}{|c|c|c|c|c|}
-		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
-		\hline
 
-		10000000  & 190    & 773  & 641           & 631          \\
-		100000000 & 1560   & 7228 & 5919          & 5647
-	\end{tabular}
-	\caption{Linear Function Composition 2}
-	\begin{tabular}{|c|c|c|c|c|}
-		          & Primal & RMAD  & PPAD-compiler & PPAD-futhark \\
-		\hline
+\begin{figure}[h]
+	\makebox[\textwidth][c]{
+		\begin{tabular}{|c|c c c c|c|c c c c|}
+			\hline
+			MM5x5     & Primal & RMAD   & PPAD-C & PPAD-F & MM3x3     & Primal & RMAD  & PPAD-C & PPAD-F \\
+			\hline
+			\(D_{1}\) & 7616   & 33828  & 170336 & 45008  & \(D_{1}\) & 960    & 6566  & 8263   & 6198   \\
+			\(D_{2}\) & 37626  & 167955 & 848794 & 223939 & \(D_{2}\) & 8986   & 64790 & 81734  & 61005  \\
+			\hline
+			MM2x2     & Primal & RMAD   & PPAD-C & PPAD-F & LO        & Primal & RMAD  & PPAD-C & PPAD-F \\
+			\hline
+			\(D_{1}\) & 370    & 1552   & 2086   & 1579   & \(D_{1}\) & 188    & 614   & 750    & 746    \\
+			\(D_{2}\) & 3360   & 15019  & 20264  & 15101  & \(D_{2}\) & 1552   & 5637  & 6984   & 6698   \\
+			\hline
+			LO2       & Primal & RMAD   & PPAD-C & PPAD-F & NLO       & Primal & RMAD  & PPAD-C & PPAD-F \\
+			\hline
+			\(D_{1}\) & 190    & 773    & 641    & 631    & \(D_{1}\) & 369    & 2370  & 2744   & 1531   \\
+			\(D_{2}\) & 1560   & 7228   & 5919   & 5647   & \(D_{2}\) & 3248   & 23046 & 26746  & 14510  \\
+			\hline
+			Add       & Primal & RMAD   & PPAD-C & PPAD-F & VAdd      & Primal & RMAD  & PPAD-C & PPAD-F \\
+			\hline
+			\(D_{1}\) & 144    & 147    & 215    & 157    & \(D_{1}\) & 1449   & 302   & 10265  & 1263   \\
+			\(D_{2}\) & 784    & 1270   & 1848   & 1325   & \(D_{2}\) & 12995  & 2608  & 91315  & 11537  \\
+			\hline
 
-		10000000  & 369    & 2370  & 2744          & 1531         \\
-		100000000 & 3248   & 23046 & 26746         & 14510
-	\end{tabular}
-	\caption{Function Composition}
-	\begin{tabular}{|c|c|c|c|c|}
-		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
-		\hline
+			Min       & Primal & RMAD   & PPAD-C & PPAD-F & Mul       & Primal & RMAD  & PPAD-C & PPAD-F \\
+			\hline
+			\(D_{1}\) & 146    & 147    & 215    & 565    & \(D_{1}\) & 106    & 368   & 479    & 476    \\
+			\(D_{2}\) & 1183   & 1270   & 1848   & 4866   & \(D_{2}\) & 783    & 3229  & 4323   & 4012   \\
+			\hline
+		\end{tabular}
+	}
+	\makebox[\textwidth][c]{
+		\begin{tabular}{|c|c|c|c|c|}
+			VMul      & Primal & RMAD & PPAD-C & PPAD-F \\
+			\hline
 
-		10000000  & 144    & 147  & 215           & 157          \\
-		100000000 & 784    & 1270 & 1848          & 1325
-	\end{tabular}
-	\caption{Addition}
-	\begin{tabular}{|c|c|c|c|c|}
-		         & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
-		\hline
-
-		1000000  & 1449   & 302  & 10265         & 1263         \\
-		10000000 & 12995  & 2608 & 91315         & 11537
-	\end{tabular}
-	\caption{Vector Addition}
-	\begin{tabular}{|c|c|c|c|c|}
-		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
-		\hline
-
-		10000000  & 146    & 147  & 215           & 565          \\
-		100000000 & 1183   & 1270 & 1848          & 4866
-	\end{tabular}
-	\caption{Min}
-	\begin{tabular}{|c|c|c|c|c|}
-		          & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
-		\hline
-
-		10000000  & 106    & 368  & 479           & 476          \\
-		100000000 & 783    & 3229 & 4323          & 4012
-	\end{tabular}
-	\caption{Mul}
-	\begin{tabular}{|c|c|c|c|c|}
-		         & Primal & RMAD & PPAD-compiler & PPAD-futhark \\
-		\hline
-
-		1000000  & 1448   & 716  & 23582         & 24147        \\
-		10000000 & 12968  & 6558 & 214282        & 214121
-	\end{tabular}
-	\caption{vecmul}
+			\(D_{1}\) & 1448   & 716  & 23582  & 24147  \\
+			\(D_{2}\) & 12968  & 6558 & 214282 & 214121 \\
+			\hline
+		\end{tabular}}
+	\caption{The results of the benchmark. The results are the runtime of each
+		benchmark measured in \(\mu s\)}
 \end{figure}
-
-\subsection{Comparison of PPAD implementation in Futhark and in compiler}
+\subsection{Results}
+\subsubsection*{Comparison of PPAD implementation in Futhark and compiler}
 Comparing the two PPAD implementations,
 we see that the compiler implementation runs slower or equal in 10/11 benchmarks,
 but that for 9 out of 11 benchmarks the runtime is at most double the
@@ -462,13 +469,10 @@ arrays.
 This is however contrasted by the vectorised multiplication which performs
 equally well in both implementations.
 
-\subsection{Comparison between PPAD and RMAD procedure}
+\subsubsection*{Comparison between PPAD and RMAD procedure}
 We see that PPAD-compiler implementation performs worse than the RMAD
-implementation, in all cases except for the linear operator on \(\mathbb{R}^{2}\)
+implementation, in all cases except for the second linear operator \(\odot'\).
 
-\begin{align*}
-	(a,b) \odot (c,d) = (a + c + b \cdot d, b + d).
-\end{align*}
 In a lot of cases this is expected as the vectorised operations, have extra
 optimization in \cite{Futhark}, making them run faster.
 We still however see that slowdown is no more than a factor 2, for all
@@ -476,8 +480,6 @@ benchmarks except 5x5 matrix multiplication, but that seems to an issue with
 the compiler implementation, rather than the procedure itself, as the
 futhark implementation is much close to the RMAD procedure.
 \section{Conclusion}
-We can see that ...
-
 We suspect that the cause for the lacking performance in our compiler-generated version of the PPAD
 algorithm lies in the additional checks for neutral elements that are inserted around
 every call to \lstinline{op_lifted}, but verification of this would require a correct
@@ -487,5 +489,101 @@ In conclusion, using the PPAD algorithm as an alternative for the current implem
 Futhark compiler holds promise, but due to practical limitations and lacking performance, further
 work would need to be done to make it a viable alternative in terms of performance.
 \printbibliography
-
+\section{Further work}
+%TODO:Add description of future work.
 \end{document}
+%TODO:add a benchmark with multiple test
+
+\begin[H]{figure}
+\begin{tabular}{|c|c c c c|}
+	\hline
+	\(D_{i}\) / MM5x5 & Primal & RMAD   & PPAD-C & PPAD-F \\
+	\hline
+	\(10^{7}\)        & 7616   & 33828  & 170336 & 45008  \\
+	\(10^{8}\)        & 37626  & 167955 & 848794 & 223939 \\
+	\hline
+\end{tabular}
+\begin{tabular}{|c|c|c|c|c|}
+	\(D_{i}\) / MM5x5 & Primal & RMAD  & PPAD-C & PPAD-F \\
+	\hline
+
+	\(D_{1}\)         & 960    & 6566  & 8263   & 6198   \\
+	\(D_{1}\)         & 8986   & 64790 & 81734  & 61005
+\end{tabular}
+\caption{Matrix Multiplication 3x3}
+\begin{tabular}{|c|c|c|c|c|}
+	\(D_{i}\) / MM5x5 & Primal & RMAD  & PPAD-C & PPAD-F \\
+	\hline
+
+	\(D_{1}\)         & 370    & 1552  & 2086   & 1579   \\
+	\(D_{2}\)         & 3360   & 15019 & 20264  & 15101
+\end{tabular}
+\caption{Matrix Multiplication 2x2}
+\begin{tabular}{|c|c|c|c|c|}
+	          & Primal & RMAD & PPAD-C & PPAD-F \\
+	\hline
+
+	\(D_{1}\) & 188    & 614  & 750    & 746    \\
+	\(D_{2}\) & 1552   & 5637 & 6984   & 6698
+\end{tabular}
+\caption{Linear Function Composition}
+\begin{tabular}{|c|c|c|c|c|}
+	          & Primal & RMAD & PPAD-C & PPAD-F \\
+	\hline
+
+	\(D_{1}\) & 190    & 773  & 641    & 631    \\
+	\(D_{2}\) & 1560   & 7228 & 5919   & 5647
+\end{tabular}
+\caption{Linear Function Composition 2}
+\begin{tabular}{|c|c|c|c|c|}
+	          & Primal & RMAD  & PPAD-C & PPAD-F \\
+	\hline
+
+	\(D_{1}\) & 369    & 2370  & 2744   & 1531   \\
+	\(D_{2}\) & 3248   & 23046 & 26746  & 14510
+\end{tabular}
+\caption{Function Composition}
+\begin{tabular}{|c|c|c|c|c|}
+	          & Primal & RMAD & PPAD-C & PPAD-F \\
+	\hline
+
+	\(D_{1}\) & 144    & 147  & 215    & 157    \\
+	\(D_{2}\) & 784    & 1270 & 1848   & 1325
+\end{tabular}
+\caption{Addition}
+\begin{tabular}{|c|c|c|c|c|}
+	          & Primal & RMAD & PPAD-C & PPAD-F \\
+	\hline
+
+	1000000   & 1449   & 302  & 10265  & 1263   \\
+	\(D_{1}\) & 12995  & 2608 & 91315  & 11537
+\end{tabular}
+\caption{Vector Addition}
+\begin{tabular}{|c|c|c|c|c|}
+	          & Primal & RMAD & PPAD-C & PPAD-F \\
+	\hline
+
+	\(D_{1}\) & 146    & 147  & 215    & 565    \\
+	\(D_{2}\) & 1183   & 1270 & 1848   & 4866
+\end{tabular}
+\caption{Min}
+\begin{tabular}{|c|c|c|c|c|}
+	          & Primal & RMAD & PPAD-C & PPAD-F \\
+	\hline
+
+	\(D_{1}\) & 106    & 368  & 479    & 476    \\
+	\(D_{2}\) & 783    & 3229 & 4323   & 4012
+\end{tabular}
+\caption{Mul}
+\begin{tabular}{|c|c|c|c|c|}
+	          & Primal & RMAD & PPAD-C & PPAD-F \\
+	\hline
+
+	\(D_{1}\) & 1448   & 716  & 23582  & 24147  \\
+	\(D_{2}\) & 12968  & 6558 & 214282 & 214121
+\end{tabular}
+\caption{The results
+	lkldskf j\\l
+
+	dlkfds}
+\end{figure}
