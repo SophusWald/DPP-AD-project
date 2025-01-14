@@ -1,5 +1,4 @@
 \documentclass{article}
-
 % --- Packages ------------------------------------------- ----- Standard Packages --------------------------------
 \usepackage{graphicx} % Required for inserting images
 \usepackage{amsthm} %let us define theorems
@@ -61,28 +60,40 @@ Sophus Valentin Willumsgaard (hwx333@alumni.ku.dk)}
 \section{Introduction}
 The purpose of this project is to implement the algorithm given in \cite{PPAD}, for reverse
 differentiation of the scan operator in Futhark.
-We compare this with the current implementation described in \cite{Futhark}.
-\section{Algorithm}
-We here give a description of the procedures for automatic differentiation of
+In this report,
+we describe the procedure for reverse differentiation of a
+scan operation given in \cite{PPAD},
+and how it differs from the current implementation as described in
+\cite{Futhark}.
+
+We then show how we have implemented the procedure in the Futhark compiler,
+and lastly give benchmarks to compare with the current implementation.
+\section{Description of Algorithm}
+We here give a description of the general-case procedures for automatic differentiation of
 scan described in \cite{PPAD} and \cite{Futhark}.
 
+We will use \(\odot\) to denote a general associative operator with neutral
+element \(e_{\odot}\), defined either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\).
+Given an array of variables in the program \(\text{x}\),
+we let \(\xo\) denote the array of adjoint values in AD.
 \subsection{Non Parallel Procedure}
-Let \(\odot\) be an associative operator with an identity element \(e_{\odot}\).
-This can either be on a datatype of numbers or array of numbers.
-%\begin{lstlisting}[mathescape=true]
-%   let rs = scan $\odot$ $e_{\odot}$ as
-%\end{lstlisting}
-Let \(\ors\) be the adjoint of rs, which is known at the current stage of
-automatic differentiation.
-We are then interested in calculating \(\oas\).
-From the formula
+Our task is assuming we have a program containing the following definition
+\begin{minted}[escapeinside=||]{futhark}
+let rs = scan |$\odot$| |$e_{\odot}$| as
+\end{minted}
+to use the values of \(\ors, \rs, \as\) to calculate \(\oas\).
+From the definition of scan, we have
+%\begin{minted}[escapeinside=||]{futhark}
+%	|$\rs [0] = \as[0]$|
+%	|$\rs [i+1] = \rs[i] \odot \as[i+1]$|
+%\end{minted} 
 \begin{align*}
 	\rs [0] = \as[0] \\
 	\rs [i+1] = \rs[i] \odot \as[i+1]
 \end{align*}
 We see that the value of \(\rs[i]\) depend on \(\rs[j]\) for \(i>j\).
 For this reason we introduce another array of adjoint vectors \(\xo\),
-which is the same as \(\ors\) but with the with contribution of the lower
+which is the same as \(\ors\) but with the contribution of the lower
 values to the higher values recorded.
 From the above formulas we then get
 
@@ -95,8 +106,9 @@ From the above formulas we then get
 	\cdot
 	\xo[i]
 \end{align*}
-From these formulas, we can write two for loops to calculate first \(\xo\)
-and then \(\oas\),
+From these formulas, we can calculate \(\oas\) in two loops.
+The first loop inductively calculates \(\xo\),
+and the second loop calculate \(\oas\),
 however this would not preserve parallelism. We will now describe how to
 calculate these in a parallel way.
 \subsection{Parallelization}
@@ -107,17 +119,17 @@ given the calculation of \(\xo\),
 \section{Implementation}
 The implementation of the algorithm described in \cite{PPAD} was driven by the \href{https://github.com/diku-dk/ifl23-revad-red-scan/blob/main/scan/scan-adj-comp.fut}{reference implementation} in Futhark code from \cite{Futhark}, with the structure of the compiler code globally following the Futhark reference code. There is one notable difference between the Futhark implementation and the compiler code, namely in the treatment of neutral elements for \lstinline{op_lifted}. In \cite{PPAD} it was noted that for the lifted operator as defined there, \lstinline{(e, e, 0)} would serve as a right-neutral element, allowing for a reverse-scan over the constructed array \lstinline{m} (with \lstinline{e} being the original neutral element). This approach leads to the simple definition of \lstinline{op_lift} from the Futhark reference code in Code Block \ref{code:fut-oplift}:
 \begin{code}
-\begin{minted}[linenos]{futhark}
+	\begin{minted}[linenos]{futhark}
 let z_term = op_bar_1 op (x1, a1, y2_h)
 let z = plus z_term y1_h
 in  (x1, op a1 a2, z)
 \end{minted}
-\caption{Reference Futhark code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs). \lstinline{op_bar_1} refers to differentiating \lstinline{op} with respect to its first argument.\\}
-\label{code:fut-oplift}
+	\caption{Reference Futhark code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs). \lstinline{op_bar_1} refers to differentiating \lstinline{op} with respect to its first argument.\\}
+	\label{code:fut-oplift}
 \end{code}
 We can similarly define the core operator in the compiler code, as shown in Code Block \ref{code:hsk-oplift}:
 \begin{code}
-\begin{minted}[linenos]{haskell}
+	\begin{minted}[linenos]{haskell}
 op_lift px1 pa1 py1 pa2 py2 adds = do
     op_bar_1 <- mkScanAdjointLam ops (scanLambda scan) 
                     WrtFirst (Var . paramName <$> py2)
@@ -173,6 +185,7 @@ Using this implementation of \lstinline{op_lift} (named \lstinline{mkPPADOpLifte
 \newpage
 \begin{code}
 \begin{minted}[linenos]{futhark}
+let ys = scan op e u
 let as_lft = map (\i -> if i < n-1 then u[i+1] else e) (iota n)
 let m = zip3 ys as_lft x_b
 let (_, _, rs_adj) = unzip3 <|
@@ -187,7 +200,7 @@ in  as_bar
 \vspace{0.3cm}
 The compiler code is very similar in structure, with the exception of the additional boolean field marking the neutral element as "e" and the original array as "not e". The following Code Block \ref{code:hsk-scanbar} was added as part of the main \lstinline{diffScan} function (each line grouping is one \lstinline{let} from Code Block \ref{code:fut-scanbar}):
 \begin{code}
-\begin{minted}[linenos]{haskell}
+	\begin{minted}[linenos]{haskell}
 let e = scanNeutral scan
 as_lift <- asLiftPPAD as w e
 
