@@ -84,24 +84,23 @@ We here give a description of the general-case procedures for automatic differen
 scan described in \cite{PPAD} and \cite{Futhark}.
 
 We will use \(\odot\) to denote a general associative operator defined
-either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\) with neutral
-element \(e_{\odot}\), defined either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\),
-which is differentiable in each variable.
+either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\) which is differentiable in each variable,
+and which have a neutral element \(e_{\odot}\).
 Given an array of variables \(\xs\),
 we let \(\xo\) denote the array of adjoint values in AD.
 Following \cite{PPAD},
 and the current implementation of AD in Futhark,
-we let the adjoint values have the same type as there corresponding variables.
+we let the adjoint values have the same type as their corresponding variables.
 For an array \(as\),
 we switch between the notation \(as[i]\) and \(as_{i}\) to denote its elements
 depending on the context.
 
 \subsection{Non-Parallel Procedure}
-Our task is assuming we have a program containing the following definition
+Assuming we have a program containing the following definition
 \begin{minted}[escapeinside=||]{futhark}
 let |$\rs$| = scan |$\odot$| |$e_{\odot}$| |$\as$|
 \end{minted}
-to use the values of
+our task is to use the values of
 \(\ors, \rs, \as\) to calculate \(\oas\).
 From the definition of scan, we have
 \begin{align*}
@@ -192,10 +191,10 @@ map3 (\x y z -> vjp (\w -> £$x\odot w$£) y z) ([£$e_{\odot}$£] ++ init £$\r
 The general idea for reverse AD of scan operators in the current Futhark
 implementation,
 is similar to the above procedure,
-in that it first calculates the array \(\xo\) with a scan,
-and then calculates \(\oas\) with a map using \(\xo\).
-The calculation of \(\oas\) is the same as the one above,
-however the calculations of \(\xo\) differs.
+in that it first uses a scan for calculating \(\xo\),
+followed by a map for \(\oas\).
+The map for \(\oas\) is exactly the same,
+but the calculations of \(\xo\) differs.
 
 Instead of calculating the derivatives
 \begin{align*}
@@ -206,7 +205,7 @@ the Jacobians representing the derivative functions are instead calculated
 first, and stored to be used in the scan.
 This can be done by a map operator,
 since the derivative only depend on \(\rs, \as\) and the operator \(\odot\).
-From this \(\xo\) can be calculated by a scan operator.
+From this, \(\xo\) can be calculated by a scan operator.
 
 It is also worth noting that in special cases,
 such as then the operator \(\odot\) is addition or a vectorised version of scalar operator,
@@ -224,10 +223,10 @@ the derivatives does not need to be calculated in those dimensions.
 
 However calculating the Jacobian beforehand has some advantages. In
 particular,
-the current Futhark compiler, after calculating the Jacobian, performs static
+the current Futhark compiler after calculating the Jacobian, performs static
 analysis to see if the Jacobian is of block-diagonal form.
 In this case the Jacobians can be represented by much smaller matrices,
-which vastly increases the scan step in computation.
+which greatly optimises the scan step in computation.
 The scan is also harder to optimize compared to the map,
 so when the operator inside the scan is more complicated as it is in the
 \cite{PPAD} implementation,
@@ -368,7 +367,7 @@ These operators are
 \end{enumerate}
 We have further added a non-linear operator
 \begin{align*}
-	(x_{0},y_{0}, z_{0}) \odot (x_{1},y_{1}, z_{1})
+	(x_{0},y_{0}, z_{0}) \otimes (x_{1},y_{1}, z_{1})
 	=
 	(x_{0}^{\ln x_{1}},y_{0}\cdot y_{1}, z_{0}+z_{1})
 \end{align*}
@@ -388,6 +387,9 @@ floats.
 	\item For the other operations we have two arrays of dimensions
 	      \(10^{7}\) and \(10^{8}\).
 \end{itemize}
+Further for 3x3 matrix multiplication and the second linear operator \(\odot'\),
+we have added more datasets, for generating the graphs in \ref{graph1}
+and \ref{graph2}.
 \subsubsection*{Hardware}
 We ran the benchmarks on the Futhark machine hendrixfut01fl in the Hendrix
 cluster,
@@ -453,16 +455,22 @@ In our benchmarks, we test 4 different implementations.
 		\end{tabular}}
 	\caption{The results of the benchmark. The results are the runtime of each
 		benchmark measured in \(\mu s\)}
+	\label{results}
 \end{figure}
 \begin{figure}[h]
 	\includegraphics[width=\textwidth]{graphofruntime.png}
-	\caption{Graph of results for Second linear operator.}
+	\caption{Graph of results for Second linear operator \(\odot'\).}
+	\label{graph1}
 \end{figure}
 \begin{figure}[h]
 	\includegraphics[width=\textwidth]{graphofruntime2.png}
 	\caption{Graph of results of matrix multiplication for 3x3 matrices.}
+	\label{graph2}
 \end{figure}
 \subsection{Results}
+The results can be seen in figures \ref{results},
+\ref{graph1} and
+\ref{graph2}.
 \subsubsection*{Comparison of PPAD implementation in Futhark and compiler}
 Comparing the two PPAD implementations,
 we see that the compiler implementation runs slower or equal in 10/11 benchmarks,
@@ -486,6 +494,17 @@ We still however see that slowdown is no more than a factor 2, for all
 benchmarks except 5x5 matrix multiplication, but that seems to an issue with
 the compiler implementation, rather than the procedure itself, as the
 futhark implementation is much close to the RMAD procedure.
+
+\subsubsection*{Comparison to primal code}
+Overall it seems all 3 of the implementations are not the far from each
+other compared to the primal code as seen in \ref{graph1}
+and
+\ref{graph2},
+except for the cases where the compiler is optimized to that particular
+operation as in Add, VAdd and VMul.
+This suggest that optimizing the AD for specific
+operations when applicable, can be profitable way to achieve higher
+efficiency.
 \section{Conclusion}
 We suspect that the cause for the lacking performance in our compiler-generated version of the PPAD
 algorithm lies in the additional checks for neutral elements that are inserted around
