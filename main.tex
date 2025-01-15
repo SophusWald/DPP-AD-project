@@ -11,6 +11,8 @@
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{hyperref}
+% \usepackage{geometry}
+
 % https://tex.stackexchange.com/questions/254044/caption-and-label-on-minted-code
 \usepackage[newfloat]{minted}
 \usepackage{caption}
@@ -70,7 +72,7 @@ Sophus Valentin Willumsgaard (hwx333@alumni.ku.dk)}
 \maketitle
 \tableofcontents
 \section{Introduction}
-The purpose of this project is to implement the algorithm given in \cite{PPAD}, for reverse
+The purpose of this project is to implement the algorithm given in \cite{PPAD} for reverse
 automatic differentiation of the scan operator in Futhark.
 In this report,
 we describe the procedure for reverse automatic differentiation of a
@@ -78,17 +80,17 @@ scan operation given in \cite{PPAD},
 and how it differs from the current implementation as described in
 \cite{Futhark}.
 We then show how we have implemented the procedure in the Futhark compiler,
-and lastly give benchmarks to compare with the current implementation.
+and lastly, we give benchmarks to compare with the current implementation.
 \section{Description of Algorithm}
-We here give a description of the general-case procedures for automatic differentiation of
-scan described in \cite{PPAD} and \cite{Futhark}.
+We here describe the general-case procedures for the automatic differentiation of
+scan as described in \cite{PPAD} and \cite{Futhark}.
 
 We will use \(\odot\) to denote a general associative operator defined
 either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\) which is differentiable in each variable,
 and which have a neutral element \(e_{\odot}\).
 Given an array of variables \(\xs\),
 we let \(\xo\) denote the array of adjoint values in AD.
-Following \cite{PPAD},
+Following \cite{PPAD}
 and the current implementation of AD in Futhark,
 we let the adjoint values have the same type as their corresponding variables.
 For an array \(as\),
@@ -108,10 +110,10 @@ From the definition of scan, we have
 	\rs [i+1] = \rs[i] \odot \as[i+1]
 \end{align*}
 We see that the value of \(\rs[i]\) depend on \(\rs[j]\) for \(i>j\).
-For this reason we introduce another array of adjoint vectors \(\xo\),
+For this reason, we introduce another array of adjoint vectors \(\xo\),
 which is similar to \(\ors\), but also includes the contribution of the lower
 indices upon the higher ones.
-From the above formulas we then get
+From the above formulas, we then get
 \begin{align*}
 	\xo [n-1] = \ors [n-1]     \\
 	\xo [i-1] = \frac{\partial (\rs [i-1] \odot \as[i])}{\partial \rs[i-1]}
@@ -121,11 +123,9 @@ From the above formulas we then get
 	\cdot
 	\xo[i]
 \end{align*}
-From these formulas, we can calculate \(\oas\) in two loops.
-The first loop inductively calculates \(\xo\),
-and the second loop calculate \(\oas\),
-however this would not preserve parallelism. We will now describe how to
-calculate these in a parallel way.
+We can then calculate \(\oas\) from these formulas in two loops.
+The first loop could inductively calculate \(\xo\),
+and the second loop could calculate \(\oas\). However, this would not preserve any of the parallelism present in the primal. As such, we will now describe how to calculate these in a parallel way.
 \subsection{Parallelization}
 We note that the calculation of \(\oas[i]\) does not depend on any values of
 \(\oas\),
@@ -143,8 +143,8 @@ given by
 	\left[r_{1}, a_{1} \otimes a_{2},
 		\frac{\partial (r_{1} \odot a_{1})}{\partial r_{1}} \cdot \overline{r}_{2} + \overline{r}_{1} \right]
 \end{align*}
-in \cite{PPAD} they show this operator is associative and have a right
-identity \(e_{\otimes} :=[e_{\odot}, e_{\odot}, 0]\).
+This operator is shown in \cite{PPAD} to be associative and have a right
+neutral element \(e_{\otimes} :=[e_{\odot}, e_{\odot}, 0]\).
 
 \begin{theorem}
 	The following procedure
@@ -183,10 +183,12 @@ let £$ms$£ = zip3 £$\rs$£ (tail £$\as$£ ++ [£$e_{\odot}$£]) £$\ors$£
 let (£$\bs,\cs,\ds$£) = scan_right £$\otimes$£ £$e_{\otimes}$£ £$ms$£ |> unzip3
 in map3 (\x y z -> £$\partial (x \odot y)/\partial y \cdot z$£) ([£$e_{\odot}$£] ++ init £$\rs$£ ) £$ \as $£ £$ \ds $£
 \end{minted}
-Where the last line correspond to a use of vjp
+Where the last line corresponds to a use of vjp
 \begin{minted}[escapeinside=££]{futhark}
 map3 (\x y z -> vjp (\w -> £$x\odot w$£) y z) ([£$e_{\odot}$£] ++ init £$\rs$£ ) £$ \as $£ £$ \ds $£
 \end{minted}
+
+\newpage
 \subsection{Comparison to current Futhark implementation}
 The general idea for reverse AD of scan operators in the current Futhark
 implementation,
@@ -203,37 +205,33 @@ Instead of calculating the derivatives
 inside the scan,
 the Jacobians representing the derivative functions are instead calculated
 first, and stored to be used in the scan.
-This can be done by a map operator,
+The derivative calculation can then be done with a map operator,
 since the derivative only depend on \(\rs, \as\) and the operator \(\odot\).
 From this, \(\xo\) can be calculated by a scan operator.
 
-It is also worth noting that in special cases,
+It is also worth noting that in some special cases,
 such as then the operator \(\odot\) is addition or a vectorised version of scalar operator,
 there are more optimal ways of calculating the adjoint values,
-which the compiler takes advantage of.
+which the compiler can take advantage of.
 \subsection{Discussion about Efficiency}
 The disadvantages of calculating the Jacobians beforehand,
 is that it is memory-intensive to have so much data to be used inside the
-scan operator. Furthermore calculating the Jacobians seperated from their
+scan operator. Furthermore, calculating the Jacobians separated from their
 application to the adjoints,
-removes the possibility of using optimization built in the automatic
-differentiation.
-For example if the adjoint values are 0 in some dimensions,
-the derivatives does not need to be calculated in those dimensions.
+removes the possibility of using optimization built into the automatic
+differentiation (for example, if the adjoint values are always 0 in some dimensions, the derivatives do not need to be calculated in those dimensions).
 
-However calculating the Jacobian beforehand has some advantages. In
+However, calculating the Jacobian beforehand has some advantages. In
 particular,
-the current Futhark compiler after calculating the Jacobian, performs static
+after calculating the Jacobian the current Futhark compiler performs static
 analysis to see if the Jacobian is of block-diagonal form.
-In this case the Jacobians can be represented by much smaller matrices,
-which greatly optimises the scan step in computation.
+In this case, the Jacobians can be represented by much smaller matrices,
+which greatly optimizes the scan step in computation.
 The scan is also harder to optimize compared to the map,
-so when the operator inside the scan is more complicated as it is in the
-\cite{PPAD} implementation,
-it will cause a greater runtime.
+so when the operator inside the scan is more computationally expensive (as it is in the \cite{PPAD} implementation), it will have a greater effect on the program's performance than if the expensive operator would have been in a map.
 \newpage
 \section{Implementation}
-The implementation of the algorithm described in \cite{PPAD} was driven by the \href{https://github.com/diku-dk/ifl23-revad-red-scan/blob/main/scan/scan-adj-comp.fut}{reference implementation} in Futhark code from \cite{Futhark}, with the structure of the compiler code globally following the Futhark reference code. There is one notable difference between the Futhark implementation and the compiler code, namely in the treatment of neutral elements for \lstinline{op_lifted}. In \cite{PPAD} it was noted that for the lifted operator as defined there, \lstinline{(e, e, 0)} would serve as a right-neutral element, allowing for a reverse-scan over the constructed array \lstinline{m} (with \lstinline{e} being the original neutral element). This approach leads to the simple definition of \lstinline{op_lift} from the Futhark reference code in Code Block \ref{code:fut-oplift}:
+The implementation of the algorithm described in \cite{PPAD} was driven by the \href{https://github.com/diku-dk/ifl23-revad-red-scan/blob/main/scan/scan-adj-comp.fut}{reference implementation} in Futhark code from \cite{Futhark}, with the structure of the compiler code globally following the Futhark reference code. One notable difference between the Futhark implementation and the compiler code is the treatment of neutral elements for \lstinline{op_lifted}. In \cite{PPAD}, it was noted that for the lifted operator as defined there, \lstinline{(e, e, 0)} would serve as a right-neutral element, allowing for a reverse-scan over the constructed array \lstinline{m} (with \lstinline{e} being the original neutral element). This approach leads to the simple definition of \lstinline{op_lift} from the Futhark reference code in Code Block \ref{code:fut-oplift}:
 \begin{code}
 	\begin{minted}[linenos]{futhark}
 let z_term = op_bar_1 op (x1, a1, y2_h)
@@ -265,7 +263,7 @@ op_lift px1 pa1 py1 pa2 py2 adds = do
 	\caption{Haskell code for \lstinline{op_lift} (operator for scan calculating adjoints for scan intermediates rs/xs).\\}
 	\label{code:hsk-oplift}
 \end{code}
-However, while the above is an accurate translation of the Futhark reference code, ensuring that it produces correct results under a scan required more work. This is due to that the constant folding mechanism in later passes of the Futhark compiler occasionally made incorrect inferences regarding how the neutral element could be inlined in the scan. As a concrete example, when differentiating \lstinline{scan f32.max f32.lowest}, the IR generated for \lstinline{op_bar_1} would look like Code Block \ref{code:ir-wrong}:
+However, while the above is an accurate translation of the Futhark reference code, ensuring it produces correct results under a scan requires more work. This is because the constant folding mechanism in later passes of the Futhark compiler occasionally made incorrect inferences regarding how the neutral element could be inlined in the scan. As a concrete example, when differentiating \lstinline{scan f32.max f32.lowest}, the IR for \lstinline{op_bar_1} would look like Code Block \ref{code:ir-wrong}:
 
 \begin{code}
 	\begin{minted}[linenos]{rust}
@@ -294,7 +292,7 @@ However, while the above is an accurate translation of the Futhark reference cod
 \vspace{0.3cm}
 We can see that the original intention of Line 8 in Code Block \ref{code:ir-wrong} would have been to check if $a_1 \leq x_1$, as in that case the carry $x_1$ would have continued through the \lstinline{f32.max}, adding the contribution of \lstinline{y2_h} to \lstinline{z} in the form of \lstinline{z_term}. However, we can see that, during optimization of the generated function, $x_1$ was replaced with the constant value from the neutral value (\lstinline{f32.lowest} is \lstinline{-f32.inf}).
 
-To mitigate this, the method we found was to add an extra boolean field to all elements of the scan, which would be \lstinline{True} for the neutral element and \lstinline{False} for all elements from the real array. Modifying \lstinline{op_lift} such that it ignored neutral elements and only performed the calculations when both of its arguments were non-neutral elements added overhead to the operator, but prevented the incorrect inlining from taking place. Notably, adding this check to only one side (i.e. only guarding against neutral elements as a first argument) fixed some instances of incorrect inlining (such as \lstinline{scan f32.max}, and even though the reverse scan makes it such that neutral elements should only appear as second argument), but generated new failures as well (causing the scan of matrix multiplication to fail). As such, a guard against neutral elements was necessary on both sides.
+To mitigate this, the method we found was to add an extra boolean field to all elements of the scan, which would be \lstinline{True} for the neutral element and \lstinline{False} for all elements from the real array. Modifying \lstinline{op_lift} such that it ignored neutral elements and only performed the calculations when both of its arguments were non-neutral elements added overhead to the operator but prevented the incorrect inlining from taking place. Notably, adding this check to only one side (i.e. only guarding against neutral elements as a first argument) fixed some instances of incorrect inlining (such as \lstinline{scan f32.max}, and even though the reverse scan makes it such that neutral elements should only appear as second argument), but generated new failures as well (causing the scan of matrix multiplication to fail). As such, a guard against neutral elements was necessary on both sides.
 
 Using this implementation of \lstinline{op_lift} (named \lstinline{mkPPADOpLifted} in the compiler code), we proceeded to implement the main body of the scan reverse-AD. Code Block \ref{code:fut-scanbar} shows the reference code for this (named \lstinline{scan_bar}):
 \newpage
@@ -313,7 +311,7 @@ in  as_bar
 	\label{code:fut-scanbar}
 \end{code}
 \vspace{0.3cm}
-The compiler code is very similar in structure, with the exception of the additional boolean field marking the neutral element as "e" and the original array as "not e". The following Code Block \ref{code:hsk-scanbar} was added as part of the main \lstinline{diffScan} function (each line grouping is one \lstinline{let} from Code Block \ref{code:fut-scanbar}):
+The compiler code is very similar in structure, except for the additional boolean field marking the neutral element as "e" and the original array as "not e". The following Code Block \ref{code:hsk-scanbar} was added as part of the main \lstinline{diffScan} function (each line grouping is one \lstinline{let} from Code Block \ref{code:fut-scanbar}):
 \begin{code}
 	\begin{minted}[linenos]{haskell}
 let e = scanNeutral scan
@@ -336,9 +334,9 @@ letTupExp "as_bar" $ Op $ Screma w (ys_right ++ as ++ rs_adj) $ mapSOAC op_bar_2
 	\label{code:hsk-scanbar}
 \end{code}
 \vspace{0.3cm}
-The functions \lstinline{asLiftPPAD}, \lstinline{scanRight}, \lstinline{ysRightPPAD} and \lstinline{finalMapPPAD} were also added in the compiler implementation, all bearing close resemblance to the reference implementation in terms of structure.
+The functions \lstinline{asLiftPPAD}, \lstinline{scanRight}, \lstinline{ysRightPPAD}, and \lstinline{finalMapPPAD} were also added in the compiler implementation, all bearing close resemblance to the reference implementation in terms of structure.
 
-Finally, we would like to remark that in some cases, the utility function \lstinline{lambdaReturnType} gave element types instead of the true returns types; returning \lstinline{f32} when a lambda actually returned \lstinline{[]f32}. While there was a relatively simple workaround for this bug, it should be noted that these incorrect types currently cause compilation errors in the 'normal' scan reverse-AD compiler (see \href{https://gist.github.com/p-adema/c8fc4fd5823baca18d90385370aeda5d}{this gist}).
+Finally, we would like to remark that in some cases, the utility function \lstinline{lambdaReturnType} gave element types instead of the true returns types, returning \lstinline{f32} when a lambda actually returned \lstinline{[]f32}. While there was a relatively simple workaround for this bug, it should be noted that these incorrect types currently cause compilation errors in the 'normal' scan reverse-AD compiler (see \href{https://gist.github.com/p-adema/c8fc4fd5823baca18d90385370aeda5d}{this gist}).
 
 \newpage
 \section{Benchmark}
@@ -348,13 +346,13 @@ to compare the efficiency of our implementation with the current implementation 
 \subsection{Methodology}
 \subsubsection*{Operators}
 Our choice of operators to apply scan to are very similar to the ones given
-in \cite{Futhark}, so we are able to compare the results.
+in \cite{Futhark}, so we can compare the results.
 These operators are
 \begin{enumerate}
 
 	\item addition, multiplication and min.
-	\item vectorised addition and multiplication.
-	\item Two linear operators given by
+	\item vectorized addition and multiplication.
+	\item two linear operators given by
 	      \begin{align*}
 		      (x_{0},y_{0}) \odot (x_{1},y_{1})
 		      =
@@ -373,10 +371,10 @@ We have further added a non-linear operator
 \end{align*}
 with identity \((e,1,0)\).
 \subsubsection*{Datasets}
-For each operation we run two tests with randomly generated arrays of f32
+For each operation, we run two tests with randomly generated arrays of f32
 floats.
 \begin{itemize}
-	\item For vectorised multiplication and addition we have arrays of
+	\item For vectorized multiplication and addition, we have arrays of
 	      dimensions \(16 \times 10^{7}\) and \(16 \times 10^{8}\).
 	\item For 5x5 matrix multiplication, we have two arrays of dimensions \(25 \times 10^{7}\)
 	      and \(25 \times 2 \times 10^{7}\).
@@ -384,11 +382,11 @@ floats.
 	      and \(9 \times 10^{8}\).
 	\item For 2x2 matrix multiplication, we have two arrays of dimensions \(4 \times 10^{7}\)
 	      and \(4 \times 10^{8}\).
-	\item For the other operations we have two arrays of dimensions
+	\item For the other operations, we have two arrays of dimensions
 	      \(10^{7}\) and \(10^{8}\).
 \end{itemize}
-Further for 3x3 matrix multiplication and the second linear operator \(\odot'\),
-we have added more datasets, for generating the graphs in \ref{graph1}
+Furthermore, for 3x3 matrix multiplication and the second linear operator \(\odot'\),
+we have added more datasets, with the timings shown in Fig. \ref{graph1}
 and \ref{graph2}.
 \subsubsection*{Hardware}
 We ran the benchmarks on the Futhark machine hendrixfut01fl in the Hendrix
@@ -411,8 +409,7 @@ In our benchmarks, we test 4 different implementations.
 
 
 
-
-\begin{figure}[h]
+\begin{table}[h]
 	\makebox[\textwidth][c]{
 		\begin{tabular}{|c|c c c c|c|c c c c|}
 			\hline
@@ -456,7 +453,7 @@ In our benchmarks, we test 4 different implementations.
 	\caption{The results of the benchmark. The results are the runtime of each
 		benchmark measured in \(\mu s\)}
 	\label{results}
-\end{figure}
+\end{table}
 \begin{figure}[h]
 	\includegraphics[width=\textwidth]{graphofruntime.png}
 	\caption{Graph of results for Second linear operator \(\odot'\).}
@@ -468,7 +465,7 @@ In our benchmarks, we test 4 different implementations.
 	\label{graph2}
 \end{figure}
 \subsection{Results}
-The results can be seen in figures \ref{results},
+The results can be seen in Table \ref{results} and Fig.
 \ref{graph1} and
 \ref{graph2}.
 \subsubsection*{Comparison of PPAD implementation in Futhark and compiler}
@@ -506,6 +503,7 @@ This suggest that optimizing the AD for specific
 operations when applicable, can be profitable way to achieve higher
 efficiency.
 \section{Conclusion}
+We see that, in general, the performance of our compiler implementation scales similarly to other reverse-AD methods, but seems to have a slightly worse constant factor in the scaling.
 We suspect that the cause for the lacking performance in our compiler-generated version of the PPAD
 algorithm lies in the additional checks for neutral elements that are inserted around
 every call to \lstinline{op_lifted}, but verification of this would require a correct
