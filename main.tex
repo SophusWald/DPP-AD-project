@@ -370,10 +370,9 @@ We have further added a non-linear operator
 \begin{align*}
 	(x_{0},y_{0}, z_{0}) \odot (x_{1},y_{1}, z_{1})
 	=
-	(\cosh (x_{0})\cdot x_{1} + y_{1}\cdot x_{0},
-	y_{0}\cdot y_{1},
-	\sinh (z_{0} + z_{1}\cdot y_{0} + x_{0}\cdot x_{1} ) \\
+	(x_{0}^{\ln x_{1}},y_{0}\cdot y_{1}, z_{0}+z_{1})
 \end{align*}
+with identity \((e,1,0)\).
 \subsubsection*{Datasets}
 For each operation we run two tests with randomly generated arrays of f32
 floats.
