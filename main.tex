@@ -71,20 +71,20 @@ Sophus Valentin Willumsgaard (hwx333@alumni.ku.dk)}
 \tableofcontents
 \section{Introduction}
 The purpose of this project is to implement the algorithm given in \cite{PPAD}, for reverse
-differentiation of the scan operator in Futhark.
+automatic differentiation of the scan operator in Futhark.
 In this report,
-we describe the procedure for reverse differentiation of a
+we describe the procedure for reverse automatic differentiation of a
 scan operation given in \cite{PPAD},
 and how it differs from the current implementation as described in
 \cite{Futhark}.
-
 We then show how we have implemented the procedure in the Futhark compiler,
 and lastly give benchmarks to compare with the current implementation.
 \section{Description of Algorithm}
 We here give a description of the general-case procedures for automatic differentiation of
 scan described in \cite{PPAD} and \cite{Futhark}.
 
-We will use \(\odot\) to denote a general associative operator with neutral
+We will use \(\odot\) to denote a general associative operator defined
+either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\) with neutral
 element \(e_{\odot}\), defined either on \(\mathbb{R}\) or \(\mathbb{R}^{n}\),
 which is differentiable in each variable.
 Given an array of variables \(\xs\),
@@ -456,6 +456,11 @@ In our benchmarks, we test 4 different implementations.
 \end{figure}
 \begin{figure}[h]
 	\includegraphics[width=\textwidth]{graphofruntime.png}
+	\caption{Graph of results for Second linear operator.}
+\end{figure}
+\begin{figure}[h]
+	\includegraphics[width=\textwidth]{graphofruntime2.png}
+	\caption{Graph of results of matrix multiplication for 3x3 matrices.}
 \end{figure}
 \subsection{Results}
 \subsubsection*{Comparison of PPAD implementation in Futhark and compiler}
@@ -491,7 +496,5 @@ In conclusion, using the PPAD algorithm as an alternative for the current implem
 Futhark compiler holds promise, but due to practical limitations and lacking performance, further
 work would need to be done to make it a viable alternative in terms of performance.
 \printbibliography
-\section{Further work}
-%TODO:Add description of future work.
 \end{document}
 %TODO:add a benchmark with multiple test
