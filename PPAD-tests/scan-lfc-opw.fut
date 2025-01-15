@@ -103,12 +103,12 @@ entry scan_lfc_ours [n] (inp1 : [n]f32)
 -- Scan with linear-function composition: performance
 -- ==
 -- entry: scan_opw_comp scan_opw_ours scan_opw_prim
--- compiled random input { [1000]f32      [1000]f32      [1000]f32      [1000]f32 }
--- compiled random input { [10000]f32     [10000]f32     [10000]f32     [10000]f32 }
--- compiled random input { [100000]f32    [100000]f32    [100000]f32    [100000]f32 }
--- compiled random input { [1000000]f32   [1000000]f32   [1000000]f32   [1000000]f32 }
--- compiled random input { [10000000]f32  [10000000]f32  [10000000]f32  [10000000]f32 }
--- compiled random input { [100000000]f32 [100000000]f32 [100000000]f32 [100000000]f32 }
+-- compiled random input { [100000]f32      [100000]f32      [100000]f32      [100000]f32 }
+-- compiled random input { [1000000]f32     [1000000]f32     [1000000]f32     [1000000]f32 }
+-- compiled random input { [10000000]f32    [10000000]f32    [10000000]f32    [10000000]f32 }
+-- compiled random input { [100000000]f32   [100000000]f32   [100000000]f32   [100000000]f32 }
+-- compiled random input { [1000000000]f32  [1000000000]f32  [1000000000]f32  [1000000000]f32 }
+-- compiled random input { [10000000000]f32 [10000000000]f32 [10000000000]f32 [10000000000]f32 }
 
 def opw (p1: f32, s1: f32) (p2: f32, s2: f32) = (p1 + p2 + s1*s2, s1+s2)
 def opw_ne = (0f32, 0f32)
