@@ -8,13 +8,13 @@ def plus_tup (a0: f32, a1: f32, a2: f32) (b0: f32, b1: f32, b2: f32) = (a0+a1, a
 def zero_tup = (0f32, 0f32, 0f32)
 
 
--- function composition (lfc2) operator;
+-- function composition (fc) operator;
 let lfc (a0: f32, a1: f32, a2: f32)
         (b0: f32, b1: f32, b2: f32) : (f32, f32, f32) =
-    ((f32.cosh a0)*b0 + b1*a0, a1*b1, f32.sinh (a2 + b2*a1 + b0*a0))
+    (a0 ** (f32.log b0), a1 * b1, a2 + b2)
 
 -- neutral element for linear-function composition
-let lfc_ne = (0f32, 1f32, 0f32)
+let lfc_ne = (f32.exp 1, 1f32, 0f32)
 
 def primal_lfc [n] (xs: [n](f32,f32,f32)) =
   scan lfc lfc_ne xs
