@@ -186,9 +186,12 @@ entry rev [n] (input: [n][9]f32) : [n][9][n][9]f32 =
 
 -- Scan with 3x3 matrix multiplication: performance
 -- ==
--- entry: scan_mm3_prim scan_mm3_comp scan_mm3_ours
--- compiled random input { [9][10000000]f32   [9][10000000]f32 }
--- compiled random input { [9][100000000]f32  [9][100000000]f32 }
+-- entry: scan_mm3_ours scan_mm3_prim scan_mm3_comp
+-- compiled random input { [9][100000]f32      [9][100000]f32 }
+-- compiled random input { [9][1000000]f32     [9][1000000]f32 }
+-- compiled random input { [9][10000000]f32    [9][10000000]f32 }
+-- compiled random input { [9][100000000]f32   [9][100000000]f32 }
+-- compiled random input { [9][1000000000]f32  [9][1000000000]f32 }
 
 def fromarrs3T [n] (x: [9][n]f32) = 
   map (\i -> (x[0,i],x[1,i],x[2,i],x[3,i],x[4,i],x[5,i],x[6,i],x[7,i],x[8,i])) (iota n)
