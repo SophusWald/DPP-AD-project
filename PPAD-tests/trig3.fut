@@ -56,8 +56,8 @@ entry scan_mm3_prim [n] (inp : [15][n]f32)
   fromarrs3T inp |> primal3
 
 let zero = (0f32, 0f32, 0f32, 0f32, 0f32, 0f32, 0f32, 0f32, 0f32, 0f32, 0f32, 0f32, 0f32, 0f32, 0f32)
-let plus (a1: f32, a2: f32, a3: f32, a4: f32, a5: f32, a6: f32, a7: f32, a8: f32, a9: f32, a9: f32, a10: f32, a11: f32, a12: f32, a13: f32, a14: f32, a15: f32)
-         (b1: f32, b2: f32, b3: f32, b4: f32, b5: f32, b6: f32, b7: f32, b8: f32, b9: f32, b9: f32, b10: f32, b11: f32, b12: f32, b13: f32, b14: f32, b15: f32) =
+let plus (a1: f32, a2: f32, a3: f32, a4: f32, a5: f32, a6: f32, a7: f32, a8: f32, a9: f32, a10: f32, a11: f32, a12: f32, a13: f32, a14: f32, a15: f32)
+         (b1: f32, b2: f32, b3: f32, b4: f32, b5: f32, b6: f32, b7: f32, b8: f32, b9: f32, b10: f32, b11: f32, b12: f32, b13: f32, b14: f32, b15: f32) =
   (a1+b1, a2+b2, a3+b3, a4+b4, a5+b5, a6+b6, a7+b7, a8+b8, a9+b9, a10+b10, a11+b11, a12+b12, a13+b13, a14+b14, a15+b15)
 
 entry scan_mm3_comp [n] (inp : [15][n]f32)
