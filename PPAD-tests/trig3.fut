@@ -30,7 +30,7 @@ let mm3_ne = (1f32,1f32,1f32,1f32,1f32,1f32, 1f32,1f32,1f32,1f32,1f32,1f32,1f32,
 def primal3 [n] (xs: [n](f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32)) =
   scan mm3by3 mm3_ne xs
 
-def fromarrs3 = map (\(x: [9]f32) -> (x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7],x[8],x[9],x[10],x[11],x[12],x[13],x[14]))
+def fromarrs3 = map (\(x: [15]f32) -> (x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7],x[8],x[9],x[10],x[11],x[12],x[13],x[14]))
 def toarrs3 = map (\(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) -> [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o])
 
 def onehot_2d n m x y =
