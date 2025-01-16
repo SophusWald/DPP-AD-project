@@ -36,10 +36,6 @@ def toarrs3 = map (\(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) -> [a,b,c,d,e,f,g,h,i,j,k,l,
 def onehot_2d n m x y =
   tabulate_2d n m (\i j -> f32.bool((i,j) == (x,y)))
 
-entry fwd [n] (input: [n][15]f32) : [n][15][n][15]f32 =
-  let input = fromarrs3 input
-  in tabulate (n*15) (\i -> jvp primal3 input (fromarrs3 (onehot_2d n 15 (i/15) (i%15))))
-     |> map toarrs3 |> transpose |> map transpose |> map (map unflatten)
 
 entry rev [n] (input: [n][15]f32) : [n][15][n][15]f32 =
   let input = fromarrs3 input
