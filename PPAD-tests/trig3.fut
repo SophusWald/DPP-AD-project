@@ -51,9 +51,6 @@ entry rev [n] (input: [n][15]f32) : [n][15][n][15]f32 =
 -- entry: scan_mm3_ours scan_mm3_prim scan_mm3_comp
 -- compiled random input { [15][100000]f32      [15][100000]f32 }
 -- compiled random input { [15][1000000]f32     [15][1000000]f32 }
--- compiled random input { [15][10000000]f32    [15][10000000]f32 }
--- compiled random input { [15][100000000]f32   [15][100000000]f32 }
--- compiled random input { [15][1000000000]f32  [15][1000000000]f32 }
 
 def fromarrs3T [n] (x: [15][n]f32) = 
   map (\i -> (x[0,i],x[1,i],x[2,i],x[3,i],x[4,i],x[5,i],x[6,i],x[7,i],x[8,i],x[9,i],x[10,i],x[11,i],x[12,i],x[13,i],x[14,i])) (iota n)
