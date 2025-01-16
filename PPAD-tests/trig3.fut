@@ -7,7 +7,7 @@ import "scan-adj-comp"
 
 
 def mm3by3  (a1: f32, b1: f32, c1: f32, d1: f32, e1: f32, f1: f32, g1: f32, h1: f32, i1: f32, j1: f32, k1: f32, l1: f32, m1: f32, n1: f32, o1: f32)
-            (a2: f32, b2: f32, c2: f32, d2: f32, e2: f32, f2: f32, g2: f32, h2: f32, i2: f32, j2: f32, k2: f32, l2: f32, m2: f32, n2: f32, o2: f32)
+            (a2: f32, b2: f32, c2: f32, d2: f32, e2: f32, f2: f32, g2: f32, h2: f32, i2: f32, j2: f32, k2: f32, l2: f32, m2: f32, n2: f32, o2: f32) =
 
   ( 1*b1*c1*d1*e1*f1*g1*h1*i1*j1*k1*l1*m1*n1*o1*a2,
     a1*1*c1*d1*e1*f1*g1*h1*i1*j1*k1*l1*m1*n1*o1*b2,
